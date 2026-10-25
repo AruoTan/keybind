@@ -9,6 +9,10 @@ try {
     main := Gui(, "Keybind window classification test"), fixtures.Push(main)
     main.Show("w300 h100")
     token := windows.Token(main.Hwnd)
+    description := windows.Describe(token)
+    Check(InStr(description, Format("HWND 0x{:X}", main.Hwnd))
+        && InStr(description, "class AutoHotkeyGUI") && !InStr(description, "Keybind window"),
+        "Window diagnostics must identify the class/handle without logging its title")
     Check(windows.Ordinary(main.Hwnd), "Normal GUI must count as application")
     main.Minimize()
     Check(windows.Ordinary(main.Hwnd), "Minimized GUI must count as application")

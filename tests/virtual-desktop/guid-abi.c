@@ -20,3 +20,25 @@ API int MoveDesktop(int number, int index) { (void)number; (void)index; return -
 API int MoveWindowToDesktopNumber(void *hwnd, int number) { (void)hwnd; (void)number; return -1; }
 API int GoToDesktopNumber(int number) { (void)number; return -1; }
 API int RemoveDesktop(int number, int fallback) { (void)number; (void)fallback; return -1; }
+
+/* The real public COM call uses HRESULT + GUID*. Keep failures distinct from
+ * S_OK/GUID_NULL; no Windows desktop manager is needed to exercise ComCall. */
+static int ManagerWindowId(void *self, void *hwnd, Guid *id) {
+    (void)self;
+    *id = zero;
+    switch ((uintptr_t)hwnd) {
+        case 102: return 0;             /* successful unassigned window */
+        case 103: return (int)0x80004005; /* E_FAIL, output must not be trusted */
+        case 104: *id = desktop; return 0; /* recovered DLL query */
+        case 105: return 1;             /* S_FALSE is not a confirmed result */
+        default: return (int)0x80070057; /* E_INVALIDARG */
+    }
+}
+static void *manager_vtable[] = {0, 0, 0, 0, (void *)ManagerWindowId, 0};
+static struct { void **vtable; } manager = {manager_vtable};
+API void *GetTestDesktopManager(void) { return &manager; }
+API void *InvalidGuidReturn(Guid *output, int number) {
+    (void)number;
+    *output = desktop;
+    return 0; /* Wrong sret pointer, even though the buffer contains a GUID. */
+}

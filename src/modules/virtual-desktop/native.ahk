@@ -39,14 +39,23 @@ class VDNative {
             throw Error("Unexpected DLL result: " name)
     }
 
-    GuidResult(name, argument, type := "Int") {
+    GuidResult(name, argument, type := "Int", allowEmpty := false) {
         ; Windows x64 ABI: a 16-byte return struct uses a hidden first pointer.
         ; A GUID passed by value is likewise passed as a pointer to a temporary.
         storage := Buffer(31, 0)
         pointer := (storage.Ptr + 15) & ~15
         returned := DllCall(this.Procs[name], "Ptr", pointer, type, argument, "Ptr")
-        if returned != pointer || !(NumGet(pointer, 0, "UInt64") | NumGet(pointer, 8, "UInt64"))
-            throw Error("Invalid GUID return/ABI: " name)
+        if returned != pointer
+            throw Error("Invalid GUID return ABI: " name)
+        if !(NumGet(pointer, 0, "UInt64") | NumGet(pointer, 8, "UInt64")) {
+            if allowEmpty
+                return ""
+            throw Error("No desktop GUID returned: " name)
+        }
+        return this.FormatGuid(pointer)
+    }
+
+    FormatGuid(pointer) {
         text := Buffer(78, 0)
         if !DllCall("ole32\StringFromGUID2", "Ptr", pointer, "Ptr", text, "Int", 39, "Int")
             throw Error("Cannot format desktop GUID")
@@ -54,7 +63,38 @@ class VDNative {
     }
 
     Id(index) => this.GuidResult("GetDesktopIdByNumber", index)
-    WindowId(hwnd) => this.GuidResult("GetWindowDesktopId", hwnd, "Ptr")
+    WindowId(hwnd, allowUnassigned := false) {
+        id := this.GuidResult("GetWindowDesktopId", hwnd, "Ptr", true)
+        if id = "" {
+            ; The DLL maps BOTH a failed HRESULT and a successful GUID_NULL to
+            ; zero. Ask the public COM API directly before classifying the window.
+            id := this.ManagerWindowId(hwnd)
+            if id = "" && !allowUnassigned
+                throw Error("Window has no assigned virtual desktop", , Format("HWND 0x{:X}", hwnd))
+        }
+        return id
+    }
+
+    Manager() {
+        if !this.HasOwnProp("DesktopManager")
+            this.DesktopManager := ComObject("{AA509086-5CA9-4C25-8F95-589D3C07B48A}",
+                "{A5CD92FF-29BE-454C-8D04-D82879FB3F1B}")
+        return this.DesktopManager
+    }
+
+    ManagerWindowId(hwnd) {
+        desktopId := Buffer(16, 0)
+        ; IVirtualDesktopManager::GetWindowDesktopId, vtable slot 4. Unlike
+        ; the DLL's struct return, this has an explicit GUID output parameter.
+        ; Preserve HRESULT: only S_OK + GUID_NULL means an unassigned window.
+        hr := ComCall(4, this.Manager(), "Ptr", hwnd, "Ptr", desktopId, "Int")
+        if hr != 0
+            throw Error("GetWindowDesktopId query failed", ,
+                Format("HWND 0x{:X}; HRESULT 0x{:08X}", hwnd, hr & 0xFFFFFFFF))
+        if !(NumGet(desktopId, 0, "UInt64") | NumGet(desktopId, 8, "UInt64"))
+            return ""
+        return this.FormatGuid(desktopId.Ptr)
+    }
 
     Index(id) {
         storage := Buffer(31, 0)

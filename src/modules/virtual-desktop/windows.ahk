@@ -16,6 +16,14 @@ class VDWindows {
         return pid = token.Pid && thread = token.Thread
     }
 
+    Describe(token) {
+        classBuffer := Buffer(512, 0)
+        className := DllCall("GetClassNameW", "Ptr", token.Hwnd, "Ptr", classBuffer,
+            "Int", 256, "Int") ? StrGet(classBuffer, "UTF-16") : "unknown"
+        ; Identify a cleanup blocker without logging its title or app contents.
+        return Format("HWND 0x{:X}; PID {}; class {}", token.Hwnd, token.Pid, className)
+    }
+
     All() {
         previous := A_DetectHiddenWindows
         DetectHiddenWindows true

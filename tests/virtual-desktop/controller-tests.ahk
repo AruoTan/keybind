@@ -11,7 +11,8 @@ try {
         PartialGroupFailure, OwnedDialogPropagation, FocusFailure, RemovalFailure,
         ExternalReorder, LateApplication, ConcurrentRequest, InvalidDirection, ClosedWindow,
         ForegroundChanged, FixedWindowDoesNotOccupy, PinnedGroupMember, LastDesktopGuard,
-        HotkeyPressLatch, FailureIncludesContext] {
+        HotkeyPressLatch, FailureIncludesContext, UnassignedWindow,
+        UnassignedActiveWindow, WindowClosesDuringOccupancy, CleanupPinQueryFailure] {
         test.Call()
         count += 1
     }
@@ -56,7 +57,7 @@ class FakeApi {
         this.Locations := Map(101, current), this.Pins := Map()
         this.Calls := [], this.Fail := "", this.Serial := 0
         this.SilentMove := false, this.SilentGo := false, this.ThrowAfterGo := false
-        this.AfterMove := 0
+        this.AfterMove := 0, this.OnWindowId := 0, this.PinFailures := Map()
     }
     Check(name) {
         this.Calls.Push(name)
@@ -77,15 +78,21 @@ class FakeApi {
         throw Error("Missing fake desktop")
     }
     Current() => this.Desktop
-    WindowId(hwnd) {
+    WindowId(hwnd, allowUnassigned := false) {
         this.Check("WindowId")
+        if IsObject(this.OnWindowId)
+            this.OnWindowId.Call(hwnd)
         id := this.Locations[hwnd]
+        if id = "" && !allowUnassigned
+            throw Error("Window has no assigned virtual desktop")
         if id = "?"
             throw Error("Unknown desktop ownership")
         return id
     }
     Pinned(hwnd) {
         this.Check("Pinned")
+        if this.PinFailures.Has(hwnd)
+            throw Error("Injected pin query failure")
         return this.Pins.Has(hwnd) && this.Pins[hwnd]
     }
     Create() {
@@ -149,6 +156,7 @@ class FakeWindows {
         return group
     }
     Valid(token) => this.Api.Locations.Has(token.Hwnd)
+    Describe(token) => Format("HWND 0x{:X}; PID {}; class Fixture", token.Hwnd, token.Pid)
     StillActive(group) => this.Active
     Focus(group) => this.CanFocus
     Applications() {
@@ -197,6 +205,8 @@ UnknownWindow() {
     r := Rig(), r.Api.Locations[102] := "?"
     Assert(r.Controller.Move(1) = "moved-retained")
     Assert(VDOrder(r.Api.Ids) = "A|B|")
+    Assert(r.Messages.Length = 1 && InStr(r.Messages[1], "occupancy check failed"))
+    Assert(InStr(r.Messages[1], "HWND 0x66"), "Unknown ownership must identify the blocker")
 }
 PinQueryFailure() {
     r := Rig(), r.Api.Fail := "Pinned"
@@ -333,4 +343,34 @@ HotkeyPressLatch() {
     finally {
         VirtualDesktopState := 0
     }
+}
+
+UnassignedWindow() {
+    r := Rig(), r.Api.Locations[102] := "", r.Api.PinFailures[102] := true
+    Assert(r.Controller.Move(1) = "moved")
+    Assert(VDOrder(r.Api.Ids) = "B|", "Confirmed unassigned windows must not block cleanup")
+    Assert(r.Windows.ScanCount = 2, "Unassigned windows must be handled on both scans")
+}
+UnassignedActiveWindow() {
+    r := Rig(["A"]), r.Api.Locations[101] := ""
+    Assert(r.Controller.Move(1) = "failed")
+    Assert(VDOrder(r.Api.Ids) = "A|", "Unassigned foreground windows must not create desktops")
+}
+WindowClosesDuringOccupancy() {
+    r := Rig(), r.Api.Locations[102] := "?"
+    r.Api.OnWindowId := (hwnd) => hwnd = 102 ? CloseQueriedWindow(r.Api, hwnd) : 0
+    Assert(r.Controller.Move(1) = "moved")
+    Assert(VDOrder(r.Api.Ids) = "B|", "A closed window must not block source cleanup")
+}
+CloseQueriedWindow(api, hwnd) {
+    api.Locations.Delete(hwnd)
+    throw Error("Window closed during query")
+}
+CleanupPinQueryFailure() {
+    r := Rig(), r.Api.Locations[102] := "A", r.Api.PinFailures[102] := true
+    Assert(r.Controller.Move(1) = "moved-retained")
+    Assert(VDOrder(r.Api.Ids) = "A|B|", "Live windows with failed pin queries must retain the source")
+    Assert(r.Messages.Length = 1 && InStr(r.Messages[1], "occupancy check failed"))
+    Assert(InStr(r.Messages[1], "HWND 0x66") && InStr(r.Messages[1], "class Fixture"),
+        "Cleanup errors must identify the blocker without window contents")
 }

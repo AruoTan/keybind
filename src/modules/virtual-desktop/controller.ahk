@@ -137,11 +137,24 @@ class VDController {
         for token in this.Windows.Applications() {
             if !this.Windows.Valid(token)
                 continue
-            ; A failed pin/desktop query throws, preventing deletion.
-            if this.Api.Pinned(token.Hwnd)
-                continue
-            if this.Api.WindowId(token.Hwnd) = desktop
-                return false
+            try {
+                ; Only an explicit successful GUID_NULL may be ignored. A DLL
+                ; zero on its own cannot distinguish unassigned from query failure.
+                location := this.Api.WindowId(token.Hwnd, true)
+                if !this.Windows.Valid(token)
+                    continue
+                if location = "" || this.Api.Pinned(token.Hwnd)
+                    continue
+                if location = desktop
+                    return false
+            }
+            catch as err {
+                ; Windows can disappear during a shell query. Live windows with
+                ; unknown ownership/pin state still prevent desktop removal.
+                if this.Windows.Valid(token)
+                    throw Error("Source desktop occupancy check failed: " VDErrorText(err), ,
+                        this.Windows.Describe(token))
+            }
         }
         return true
     }

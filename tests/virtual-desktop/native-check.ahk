@@ -16,9 +16,10 @@ try {
     fixture.AddText(, "Temporary test window. No application content is used.")
     fixture.Show("w420 h100")
     Sleep 200
-    if api.WindowId(fixture.Hwnd) != original || api.Pinned(fixture.Hwnd)
+    if api.WindowId(fixture.Hwnd) != original || api.ManagerWindowId(fixture.Hwnd) != original
+        || api.Pinned(fixture.Hwnd)
         throw Error("Fixture GUID/pin query failed")
-    FileAppend "PASS: exports, GUID ABI/index round trips, current/window GUID and pin queries`n", logPath, "UTF-8"
+    FileAppend "PASS: exports, GUID ABI/index round trips, current/window GUID, public HRESULT query and pin queries`n", logPath, "UTF-8"
     if exercise {
         ; All pre-existing desktops are preserved. The controller only leaves
         ; desktops created by this test; never use the original as its source.
