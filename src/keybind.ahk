@@ -3,7 +3,7 @@
 #UseHook True
 #NoTrayIcon
 
-#Include %A_LineFile%/../modules/keepass-ime.ahk
+#Include %A_LineFile%/../modules/keepass-ime/keepass-ime.ahk
 #Include %A_LineFile%/../modules/mouse.ahk
 #Include %A_LineFile%/../modules/keyboard.ahk
 #Include %A_LineFile%/../modules/virtual-desktop/virtual-desktop.ahk

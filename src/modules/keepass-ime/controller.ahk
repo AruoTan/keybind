@@ -1,40 +1,4 @@
-﻿; KeePass bridge protocol v1: 1=begin, 2=ensure English, 3=restore.
-; Only window handles are exchanged, never entry contents or keystrokes.
-KeePassImeInit() {
-  global KeePassImeWindow, KeePassImeState
-  KeePassImeState := 0
-  KeePassImeWindow := Gui("+ToolWindow -Caption", "Keybind.KeePassImeBridge.v1")
-  message := DllCall("RegisterWindowMessage", "Str", "Keybind.KeePassImeBridge.v1", "UInt")
-  if !message
-    throw OSError()
-  OnMessage message, KeePassImeMessage
-  OnExit KeePassImeExit
-}
-
-KeePassImeMessage(action, target, *) {
-  Critical
-  try {
-    switch action {
-      case 1: return KeePassImeBegin(target)
-      case 2: return KeePassImeEnglish(target)
-      case 3: return KeePassImeRestore(target)
-    }
-  }
-  catch {
-    ; The plugin aborts auto-type if the handshake fails.
-    return 0
-  }
-  return 0
-}
-
-KeePassImeControl(ime, command, value := 0) {
-  result := 0
-  if !DllCall("SendMessageTimeout", "Ptr", ime, "UInt", 0x283,
-    "UPtr", command, "Ptr", value, "UInt", 0x2, "UInt", 400,
-    "UPtr*", &result, "Ptr")
-    throw OSError()
-  return result
-}
+; Save, switch and restore target IME state, including crash recovery.
 
 KeePassImeBegin(target) {
   global KeePassImeState
@@ -111,8 +75,4 @@ KeePassImeWatch() {
   ; A crashed KeePass cannot send its final notification. No typing-duration timeout.
   if !ProcessExist("KeePass.exe")
     try KeePassImeRestore()
-}
-
-KeePassImeExit(*) {
-  try KeePassImeRestore()
 }

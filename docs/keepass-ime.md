@@ -4,7 +4,9 @@
 
 ## 源码与构建边界
 
-- `src/modules/keepass-ime.ahk`：AHK 消息处理、输入法保存、切换、恢复；由 `src/keybind.ahk` 初始化。
+- `src/modules/keepass-ime/keepass-ime.ahk`：模块入口、桥接初始化、协议消息分发和退出清理；由 `src/keybind.ahk` 初始化。
+- `src/modules/keepass-ime/controller.ahk`：输入法状态保存、英文切换、恢复和 KeePass 退出后的恢复检查。
+- `src/modules/keepass-ime/native.ahk`：带超时的原生 IME 控制消息调用。
 - `plugins/keepass-ime/KeybindImeBridge.cs`：KeePass C# 插件源码。
 - `tests/keepass-ime/`：IME 往返、跨进程通信及真实插件加载测试。
 - `scripts/build-keepass.ps1`：独立的 Windows 插件构建入口。

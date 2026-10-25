@@ -25,7 +25,7 @@ src/
   modules/
     keyboard.ahk             通用键盘快捷键
     mouse.ahk                鼠标快捷键及手势
-    keepass-ime.ahk          KeePass 输入法模块
+    keepass-ime/             KeePass 入口、状态控制、原生 IME 消息调用
     virtual-desktop/         桌面入口、控制器、原生绑定、窗口处理
 plugins/keepass-ime/          KeePass C# 插件源码
 scripts/
