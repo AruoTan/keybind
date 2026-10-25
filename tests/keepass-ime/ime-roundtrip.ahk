@@ -1,6 +1,6 @@
 #Requires AutoHotkey v2.0
 #SingleInstance Off
-#Include %A_ScriptDir%/../../src/modules/keepass-ime.ahk
+#Include %A_LineFile%/../../../src/modules/keepass-ime.ahk
 testLog := A_Args.Length ? A_Args[1] : A_Temp "\keybind-ime-test.log"
 try FileDelete testLog
 previous := WinExist("A")

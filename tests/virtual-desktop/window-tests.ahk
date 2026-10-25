@@ -1,6 +1,6 @@
 #Requires AutoHotkey v2.0
 #SingleInstance Off
-#Include %A_ScriptDir%/../../src/modules/virtual-desktop/virtual-desktop.ahk
+#Include %A_LineFile%/../../../src/modules/virtual-desktop/virtual-desktop.ahk
 
 logPath := A_Args[1]
 skipDwm := A_Args.Length >= 2 && A_Args[2] = "--skip-dwm"

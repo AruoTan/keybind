@@ -1,6 +1,6 @@
 #Requires AutoHotkey v2.0
 #SingleInstance Off
-#Include %A_ScriptDir%/../../src/modules/virtual-desktop/virtual-desktop.ahk
+#Include %A_LineFile%/../../../src/modules/virtual-desktop/virtual-desktop.ahk
 
 logPath := A_Args[1], dll := A_Args[2]
 exercise := A_Args.Length >= 3 && A_Args[3] = "--exercise"

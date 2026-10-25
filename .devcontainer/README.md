@@ -50,3 +50,5 @@ bash .devcontainer/scripts/setup-tools.sh
 - `build/cache`：上游源码 ZIP 和 Cargo 交叉编译缓存。
 
 构建使用独立 Xvfb 显示和 Wine 前缀，结束时只停止该前缀的 wineserver；同一工作区的并发构建通过文件锁拒绝。构建日志在 `build/logs/`，测试结果在 `build/tests/`，最终产物在 `dist/`。宿主 Windows 无需安装开发工具，部署及实机验证见 [功能说明](../docs/virtual-desktop.md)。
+
+AHK 的 `#Include` 统一使用 `%A_LineFile%/../` 定位当前文件所在目录，并使用 `/` 分隔路径，兼容 Linux 容器中的 AHK++ 路径解析和 Windows AutoHotkey。新增包含文件时沿用此约定，避免编辑器将 `%A_ScriptDir%` 解析为工作区根目录。

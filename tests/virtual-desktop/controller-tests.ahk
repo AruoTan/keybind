@@ -1,6 +1,6 @@
 #Requires AutoHotkey v2.0
 #SingleInstance Off
-#Include %A_ScriptDir%/../../src/modules/virtual-desktop/virtual-desktop.ahk
+#Include %A_LineFile%/../../../src/modules/virtual-desktop/virtual-desktop.ahk
 
 logPath := A_Args.Length ? A_Args[1] : A_ScriptDir "\controller-tests.log"
 try {

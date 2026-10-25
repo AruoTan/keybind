@@ -1,7 +1,7 @@
 ; Dynamic virtual desktop entry points and keyboard registration.
-#Include %A_LineFile%\..\controller.ahk
-#Include %A_LineFile%\..\native.ahk
-#Include %A_LineFile%\..\windows.ahk
+#Include %A_LineFile%/../controller.ahk
+#Include %A_LineFile%/../native.ahk
+#Include %A_LineFile%/../windows.ahk
 
 ; AutoHotkey v2, Windows x64. Including this file alone registers no hotkeys.
 VirtualDesktopInit() {
