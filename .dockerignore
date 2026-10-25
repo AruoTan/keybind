@@ -1,9 +1,0 @@
-**
-!.devcontainer/
-!.devcontainer/Dockerfile
-!scripts/
-!scripts/setup_tools.py
-!scripts/toolchain.json
-!scripts/build_tools/
-!scripts/build_tools/__init__.py
-!scripts/build_tools/toolchain.py

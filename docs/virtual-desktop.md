@@ -39,7 +39,7 @@ Windows 电脑不需要开发环境。DLL、主 EXE 和验证 EXE 都在 Linux x
 
 环境安装和检查详见 [devcontainer 说明](../.devcontainer/README.md)。构建入口统一为根目录的 `build.sh`。
 
-构建依赖固定在 `scripts/toolchain.json`：
+构建依赖固定在 `.devcontainer/toolchain.json`：
 
 - Rust 1.90.0，目标 `x86_64-pc-windows-gnu`，通过 MinGW 交叉编译，静态链接开发运行库。
 - AutoHotkey v2.0.30 x64；官方 Ahk2Exe `Ahk2Exe1.1.37.02a2` 通过 Wine/WoW64 运行。

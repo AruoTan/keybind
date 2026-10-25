@@ -12,7 +12,7 @@ Windows AutoHotkey v2 快捷键程序，包含鼠标侧键、Snipaste 手势、�
 ./build.sh --test-only
 
 # 检查开发环境
-python3 scripts/setup_tools.py --check
+bash .devcontainer/scripts/setup-tools.sh --check
 ```
 
 下载或复制 `dist/keybind-windows-x64.zip`，完整解压后先运行 `verify.bat`，再启动同目录 `keybind.exe`。完整虚拟桌面操作验证使用 `verify.bat --exercise`。实际 Windows 兼容性仍需目标机验证。
@@ -30,13 +30,19 @@ src/
 plugins/keepass-ime/          KeePass C# 插件源码
 scripts/
   build.py                   Linux 构建流程
-  setup_tools.py             工具安装与检查入口
-  toolchain.json             工具版本、下载地址及 SHA256
-  build_tools/               路径、命令、工具链、Wine/PE、打包工具
+  build_tools/               路径、命令、构建工具适配、Wine/PE、打包工具
   *.ps1                      Windows 专属插件构建和测试入口
 tests/                       按功能分组的测试及测试夹具
 docs/                        功能、构建和部署说明
-.devcontainer/               容器配置
+.devcontainer/
+  devcontainer.json          容器入口及创建后检查
+  Dockerfile                 镜像构建入口
+  .dockerignore              镜像构建上下文过滤
+  toolchain.json             固定工具版本、下载地址及 SHA256
+  scripts/
+    install-system.sh        系统依赖安装（root）
+    setup-tools.sh           用户工具安装及环境检查（Bash）
+  README.md                  环境配置与使用说明
 build/                       缓存、临时文件、日志和测试结果
 dist/                        发布文件及校验和
 backups/                     保留的旧 EXE

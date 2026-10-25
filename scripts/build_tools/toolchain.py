@@ -1,20 +1,20 @@
-"""Install/check pinned user-owned tools; system packages come from Dockerfile."""
+"""Build-side tool locations, downloads and environment validation."""
 import hashlib
 import json
 import os
 from pathlib import Path
-import platform
 import shutil
 import subprocess
-import sys
 import sysconfig
 import time
 import urllib.request
 import zipfile
 
+from .common import PROJECT
+
 
 def load_lock():
-    return json.loads((Path(__file__).resolve().parents[1] / "toolchain.json").read_text())
+    return json.loads((PROJECT / ".devcontainer/toolchain.json").read_text())
 
 
 def tool_root():
@@ -85,53 +85,7 @@ def wine_server():
     raise RuntimeError("Cannot locate Wine's matching wineserver.")
 
 
-def check_system():
-    if sys.platform != "linux" or platform.machine() != "x86_64":
-        raise RuntimeError("The build environment must be Linux x86_64.")
-    for name in ("x86_64-w64-mingw32-gcc", "xvfb-run", "xauth"):
-        if not shutil.which(name):
-            raise RuntimeError(name + " is missing. Rebuild the devcontainer.")
-    wine_binary()
-    wine_server()
-
-
 def check(lock):
-    check_system()
-    locations = paths(lock)
-    for path in locations.values():
-        if not path.is_file():
-            raise RuntimeError("Missing " + str(path) + "; run python3 scripts/setup_tools.py")
-    subprocess.run([str(locations["cargo"]), "+" + lock["rust"]["version"], "--version"], check=True)
-    targets = subprocess.check_output([
-        str(locations["rustup"]), "target", "list", "--installed", "--toolchain", lock["rust"]["version"]
-    ], text=True)
-    if lock["rust"]["target"] not in targets.splitlines():
-        raise RuntimeError("The pinned Windows Rust target is not installed.")
-    print("Pinned Linux/Windows build tools are ready.", flush=True)
-    return locations
-
-
-def install(lock):
-    check_system()
-    root = tool_root()
-    locations = paths(lock)
-    for name, output_name in (("autohotkey", "ahk"), ("ahk2exe", "compiler")):
-        item = lock[name]
-        archive = fetch(item, root / "downloads" / (name + "-" + item["version"] + ".zip"))
-        # Re-extract verified inputs; do not trust an edited executable cache.
-        unpack(archive, locations[output_name].parent)
-    if not locations["rustup"].is_file():
-        installer = fetch(lock["rustup"], root / "downloads/rustup-init")
-        installer.chmod(0o755)
-        subprocess.run([str(installer), "-y", "--profile", "minimal", "--no-modify-path",
-                        "--default-toolchain", "none"], check=True)
-    subprocess.run([str(locations["rustup"]), "set", "auto-self-update", "disable"], check=True)
-    subprocess.run([
-        str(locations["rustup"]), "toolchain", "install", lock["rust"]["version"],
-        "--profile", "minimal", "--target", lock["rust"]["target"]
-    ], check=True)
-    # Do not change an existing developer's default toolchain.
-    active = subprocess.run([str(locations["rustup"]), "show", "active-toolchain"], capture_output=True)
-    if active.returncode:
-        subprocess.run([str(locations["rustup"]), "default", lock["rust"]["version"]], check=True)
-    check(lock)
+    # Keep installation and environment checks in the devcontainer shell entry.
+    subprocess.run(["bash", str(PROJECT / ".devcontainer/scripts/setup-tools.sh"), "--check"], check=True)
+    return paths(lock)

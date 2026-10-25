@@ -2,10 +2,10 @@
     "name": "autohotkey",
     "build": {
         "dockerfile": "Dockerfile",
-        "context": ".."
+        "context": "."
     },
     "remoteUser": "vscode",
-    "postCreateCommand": "python3 scripts/setup_tools.py --check",
+    "postCreateCommand": "bash .devcontainer/scripts/setup-tools.sh --check",
     "customizations": {
         "vscode": {
             "extensions": [
