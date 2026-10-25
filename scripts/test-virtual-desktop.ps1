@@ -48,6 +48,7 @@ function Invoke-AhkTest([string]$Name, [string[]]$ExtraArguments = @()) {
 }
 
 Invoke-AhkTest 'controller-tests'
+Invoke-AhkTest 'rdp-tests'
 Invoke-AhkTest 'window-tests'
 if ($NativeCheck -or $Exercise) {
     $resolvedDll = (Resolve-Path -LiteralPath $DllPath).Path

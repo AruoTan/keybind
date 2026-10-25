@@ -22,6 +22,9 @@ def package(lock, stage, locations, dll_details):
         "wine": run([tools.wine_binary(), "--version"]),
         "controllerTests": True, "guidAbiTests": True, "windowDesktopHresultTests": True,
         "compiledStartupSmokeTest": True,
+        "rdpHookTests": True, "windowsRdpFullscreenTest": False,
+        "rdpFocusHandoffTests": True, "windowsRdpKeyboardAfterSwitchTest": False,
+        "continuousDesktopNavigationTests": True, "rememberedDesktopFocusTests": True,
         "windowCaptureTests": True, "dwmCloakTests": False,
         "windowsWindowTests": False, "nativeQueriesChecked": False, "nativeDesktopOperationsChecked": False,
         "dll": dll_details,
@@ -46,6 +49,10 @@ def package(lock, stage, locations, dll_details):
         "Extract the whole ZIP. Keep both EXE and DLL in the same directory.\n"
         "Exit the old keybind process before starting keybind.exe.\n"
         "Win+Shift+Left/Right moves the active window and follows its desktop.\n"
+        "In Windows App (msrdc) or mstsc, Win+Ctrl+Left/Right switches LOCAL desktops.\n"
+        "Win+Shift+Left/Right moves the LOCAL client window, not a remote app.\n"
+        "Keep RDP Windows-key redirection enabled for other Win shortcuts.\n"
+        "RDP diagnostics: %LOCALAPPDATA%\\keybind\\remote-desktop.log\n"
         "No Rust, Visual Studio or AutoHotkey installation is needed on Windows.\n\n"
         "Double-click verify.bat for read-only virtual desktop API checks.\n"
         "Run verify.bat --exercise to test real desktop operations with a temporary window.\n"

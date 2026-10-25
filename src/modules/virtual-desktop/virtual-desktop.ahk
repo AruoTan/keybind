@@ -42,12 +42,27 @@ VirtualDesktopMove(direction) {
     return VirtualDesktopState.Controller.Move(direction)
 }
 
+VirtualDesktopSwitch(direction, focus := 0) {
+    global VirtualDesktopState
+    if !IsSet(VirtualDesktopState) || !IsObject(VirtualDesktopState)
+        return "disabled"
+    return VirtualDesktopState.Controller.Switch(direction, focus)
+}
+
+VDSwitchKeyDown(direction, key, *) {
+    global VirtualDesktopState
+    if VirtualDesktopState.Held[key]
+        return "held"
+    VirtualDesktopState.Held[key] := true
+    return VirtualDesktopSwitch(direction)
+}
+
 VDKeyDown(direction, key, *) {
     global VirtualDesktopState
     if VirtualDesktopState.Held[key]
-        return
+        return "held"
     VirtualDesktopState.Held[key] := true
-    VirtualDesktopMove(direction)
+    return VirtualDesktopMove(direction)
 }
 
 VDKeyUp(key, *) {

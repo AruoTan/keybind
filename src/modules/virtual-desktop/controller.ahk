@@ -98,6 +98,52 @@ class VDController {
         }
     }
 
+    ; Used by the local RDP shortcut. Never move windows, create desktops or
+    ; collect empty desktops for an ordinary Ctrl+Win desktop switch.
+    Switch(direction, focus := 0) {
+        if direction != -1 && direction != 1
+            throw ValueError("Direction must be -1 or 1")
+        if this.Busy
+            return "busy"
+        this.Busy := true
+        switched := false
+        try {
+            order := this.Api.Snapshot()
+            source := this.Api.Current()
+            index := this.Find(order, source) + direction
+            if index < 0 || index >= order.Length
+                return "boundary"
+            target := order[index + 1]
+            this.CheckOrder(order)
+            if this.Api.Current() != source
+                throw Error("Current desktop changed before switch")
+            if IsObject(focus) {
+                focus.Before(this.Api, source, target)
+                this.CheckOrder(order)
+                if this.Api.Current() != source
+                    throw Error("Current desktop changed during focus handoff")
+            }
+            this.Api.Go(target)
+            this.Await(() => this.Api.Current() = target)
+            switched := true
+            if IsObject(focus) && !focus.After(this.Api, source, target)
+                throw Error("Desktop switched, but local keyboard focus could not be restored")
+            return "switched"
+        }
+        catch as err {
+            this.Report.Call(VDErrorText(err))
+            return switched ? "switched-unfocused" : "failed"
+        }
+        finally {
+            if IsObject(focus) {
+                try focus.Close()
+                catch as err
+                    this.Report.Call("Focus handoff cleanup failed: " VDErrorText(err))
+            }
+            this.Busy := false
+        }
+    }
+
     Find(order, id) {
         for index, candidate in order {
             if candidate = id

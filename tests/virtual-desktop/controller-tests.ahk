@@ -12,7 +12,11 @@ try {
         ExternalReorder, LateApplication, ConcurrentRequest, InvalidDirection, ClosedWindow,
         ForegroundChanged, FixedWindowDoesNotOccupy, PinnedGroupMember, LastDesktopGuard,
         HotkeyPressLatch, FailureIncludesContext, UnassignedWindow,
-        UnassignedActiveWindow, WindowClosesDuringOccupancy, CleanupPinQueryFailure] {
+        UnassignedActiveWindow, WindowClosesDuringOccupancy, CleanupPinQueryFailure,
+        SwitchExisting, SwitchBoundaries, SwitchWithoutWindow, SwitchFailureOnly,
+        SwitchQueryFailure, SwitchBusy, SwitchInvalidDirection, SwitchPressLatch,
+        SwitchFocusOrder, SwitchFocusBeforeFailure, SwitchFocusAfterFailure,
+        SwitchFocusApiFailure, SwitchFocusBoundary, SwitchFocusOrderChanged, SwitchFocusCloseFailure] {
         test.Call()
         count += 1
     }
@@ -27,6 +31,134 @@ catch as err {
 Assert(condition, message := "Assertion failed") {
     if !condition
         throw Error(message, -1)
+}
+
+SwitchExisting() {
+    r := Rig(["A", "B", "C"], "B")
+    Assert(r.Controller.Switch(-1) = "switched" && r.Api.Desktop = "A")
+    Assert(r.Controller.Switch(1) = "switched" && r.Api.Desktop = "B")
+    Assert(r.Api.Locations[101] = "B" && VDOrder(r.Api.Ids) = "A|B|C|")
+    Assert(r.Windows.ScanCount = 0, "Plain switching must not scan or remove empty desktops")
+    for call in r.Api.Calls
+        Assert(call = "Snapshot" || call = "Go", "Plain switching must only query and switch")
+}
+
+SwitchBoundaries() {
+    r := Rig(["A"])
+    Assert(r.Controller.Switch(-1) = "boundary")
+    Assert(r.Controller.Switch(1) = "boundary")
+    Assert(VDOrder(r.Api.Ids) = "A|" && !r.Controller.Busy)
+}
+
+SwitchWithoutWindow() {
+    r := Rig(), r.Windows.Active := false
+    Assert(r.Controller.Switch(1) = "switched", "Ctrl+Win must work with no active app")
+    Assert(r.Api.Desktop = "B" && r.Api.Locations[101] = "A")
+}
+
+SwitchFailureOnly() {
+    r := Rig(), r.Api.SilentGo := true
+    Assert(r.Controller.Switch(1) = "failed")
+    Assert(r.Api.Desktop = "A" && VDOrder(r.Api.Ids) = "A|B|")
+    Assert(r.Api.Locations[101] = "A" && !r.Controller.Busy && r.Messages.Length = 1)
+}
+
+SwitchQueryFailure() {
+    r := Rig(), r.Api.Fail := "Snapshot"
+    Assert(r.Controller.Switch(1) = "failed")
+    Assert(r.Api.Desktop = "A" && !r.Controller.Busy)
+}
+
+SwitchBusy() {
+    r := Rig(), r.Controller.Busy := true
+    Assert(r.Controller.Switch(1) = "busy" && r.Api.Calls.Length = 0)
+}
+
+SwitchInvalidDirection() {
+    r := Rig(), rejected := false
+    try r.Controller.Switch(0)
+    catch ValueError
+        rejected := true
+    Assert(rejected && !r.Controller.Busy && r.Api.Calls.Length = 0)
+}
+
+SwitchPressLatch() {
+    global VirtualDesktopState
+    r := Rig(["A", "B", "C"])
+    VirtualDesktopState := {Controller: r.Controller, Held: Map("Left", false, "Right", false)}
+    try {
+        VDSwitchKeyDown(1, "Right")
+        VDSwitchKeyDown(1, "Right")
+        VDKeyDown(1, "Right")
+        Assert(r.Api.Desktop = "B" && r.Api.Locations[101] = "A",
+            "Repeat and changing modifiers while held must not move or switch again")
+        VDKeyUp("Right")
+        VDSwitchKeyDown(1, "Right")
+        Assert(r.Api.Desktop = "C")
+    }
+    finally VirtualDesktopState := 0
+}
+
+class FakeSwitchFocus {
+    __New() {
+        this.Calls := [], this.FailBefore := false, this.FailAfter := false
+        this.FailClose := false, this.Reorder := false
+    }
+    Before(api, source, target) {
+        Assert(api.Current() = source, "Release focus before switching desktop")
+        this.Calls.Push("before")
+        if this.Reorder
+            api.Ids.Push("external")
+        if this.FailBefore
+            throw Error("Cannot release RDP focus")
+    }
+    After(api, source, target) {
+        Assert(api.Current() = target, "Restore input only after reaching the target desktop")
+        this.Calls.Push("after")
+        return !this.FailAfter
+    }
+    Close() {
+        this.Calls.Push("close")
+        if this.FailClose
+            throw Error("Focus cleanup fixture failed")
+    }
+}
+
+SwitchFocusOrder() {
+    r := Rig(), focus := FakeSwitchFocus()
+    Assert(r.Controller.Switch(1, focus) = "switched")
+    Assert(VDOrder(focus.Calls) = "before|after|close|" && !r.Controller.Busy)
+    Assert(r.Api.Locations[101] = "A", "Focus handoff must not move the RDP window")
+}
+SwitchFocusBeforeFailure() {
+    r := Rig(), focus := FakeSwitchFocus(), focus.FailBefore := true
+    Assert(r.Controller.Switch(1, focus) = "failed" && r.Api.Desktop = "A")
+    Assert(VDOrder(focus.Calls) = "before|close|" && !r.Controller.Busy)
+}
+SwitchFocusAfterFailure() {
+    r := Rig(), focus := FakeSwitchFocus(), focus.FailAfter := true
+    Assert(r.Controller.Switch(1, focus) = "switched-unfocused" && r.Api.Desktop = "B")
+    Assert(VDOrder(focus.Calls) = "before|after|close|" && r.Messages.Length = 1)
+}
+SwitchFocusApiFailure() {
+    r := Rig(), focus := FakeSwitchFocus(), r.Api.Fail := "Go"
+    Assert(r.Controller.Switch(1, focus) = "failed" && r.Api.Desktop = "A")
+    Assert(VDOrder(focus.Calls) = "before|close|")
+}
+SwitchFocusBoundary() {
+    r := Rig(["A"]), focus := FakeSwitchFocus()
+    Assert(r.Controller.Switch(1, focus) = "boundary")
+    Assert(VDOrder(focus.Calls) = "close|", "Boundary presses must leave foreground unchanged")
+}
+SwitchFocusOrderChanged() {
+    r := Rig(), focus := FakeSwitchFocus(), focus.Reorder := true
+    Assert(r.Controller.Switch(1, focus) = "failed" && r.Api.Desktop = "A")
+    Assert(VDOrder(focus.Calls) = "before|close|")
+}
+SwitchFocusCloseFailure() {
+    r := Rig(), focus := FakeSwitchFocus(), focus.FailClose := true
+    Assert(r.Controller.Switch(1, focus) = "switched" && !r.Controller.Busy)
+    Assert(r.Messages.Length = 1, "Focus cleanup failure must be reported without trapping Busy")
 }
 
 FailureIncludesContext() {

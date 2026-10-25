@@ -2,7 +2,11 @@
 
 Windows AutoHotkey v2 快捷键程序，包含鼠标侧键、Snipaste 手势、常用键盘快捷键、KeePass 输入法配合和动态虚拟桌面功能。
 
-当前版本 `1.0.0`，许可证为 [GPL-3.0-only](LICENSE)。在 Linux devcontainer 中构建 Windows x64 成品，Windows 端不需要开发环境。
+Windows App（`msrdc.exe`）或自带远程桌面（`mstsc.exe`）全屏时，可将 `Win+Shift+←/→` 和 `Win+Ctrl+←/→` 保留在控制端，分别携带本机 RDP 窗口切换桌面、仅切换本机桌面；其他 Win 组合键沿用远程桌面的转发设置。使用、诊断日志与实机验收见 [RDP 快捷键](docs/remote-desktop.md)。
+
+虚拟桌面模块初始化成功后，`Win+Ctrl+←/→` 在本机统一由 keybind 处理：可持续按住 Win+Ctrl，逐次按左右箭头跨桌面往返，返回时恢复此前活动的 RDP 会话窗口。长按箭头不连续切换。
+
+当前版本 `2.0.0`，许可证为 [GPL-3.0-only](LICENSE)。在 Linux devcontainer 中构建 Windows x64 成品，Windows 端不需要开发环境。
 
 首次 Release 发布后，可通过 Scoop 安装：
 
@@ -35,6 +39,7 @@ src/
     mouse.ahk                鼠标快捷键及手势
     keepass-ime/             KeePass 入口、状态控制、原生 IME 消息调用
     virtual-desktop/         桌面入口、控制器、原生绑定、窗口处理
+    remote-desktop/          Windows App/mstsc 本机快捷键与钩子优先级维护
 plugins/keepass-ime/          KeePass C# 插件源码
 scripts/
   build.py                   Linux 构建流程

@@ -7,7 +7,9 @@
 #Include %A_LineFile%/../modules/mouse.ahk
 #Include %A_LineFile%/../modules/keyboard.ahk
 #Include %A_LineFile%/../modules/virtual-desktop/virtual-desktop.ahk
+#Include %A_LineFile%/../modules/remote-desktop/remote-desktop.ahk
 
 KeePassImeInit()
 MouseInit()
-VirtualDesktopInit()
+if VirtualDesktopInit()
+    RemoteDesktopInit()
