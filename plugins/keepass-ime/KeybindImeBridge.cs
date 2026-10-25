@@ -9,7 +9,6 @@ using KeePass.Util.SendInputExt;
 [assembly: AssemblyTitle("Keybind IME Bridge")]
 [assembly: AssemblyProduct("KeePass Plugin")]
 [assembly: AssemblyDescription("Preserve IME state around KeePass auto-type using keybind.ahk.")]
-[assembly: AssemblyVersion("1.0.0.0")]
 
 namespace KeybindImeBridge
 {

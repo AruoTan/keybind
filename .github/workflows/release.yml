@@ -1,0 +1,142 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*.*.*'
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: Existing release tag matching VERSION
+        required: true
+        default: v1.0.0
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release-${{ inputs.tag || github.ref_name }}
+  cancel-in-progress: false
+
+jobs:
+  validate:
+    runs-on: ubuntu-24.04
+    outputs:
+      tag: ${{ steps.version.outputs.tag }}
+      commit: ${{ steps.version.outputs.commit }}
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          ref: refs/tags/${{ inputs.tag || github.ref_name }}
+          persist-credentials: false
+      - name: Validate tag and project version
+        id: version
+        env:
+          RELEASE_TAG: ${{ inputs.tag || github.ref_name }}
+        run: |
+          python3 scripts/release.py validate --tag "$RELEASE_TAG"
+          echo "tag=$RELEASE_TAG" >> "$GITHUB_OUTPUT"
+          echo "commit=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+      - name: Test release packaging
+        run: python3 -m unittest discover -s tests/release -v
+
+  build-keybind:
+    needs: validate
+    runs-on: ubuntu-24.04
+    container: ubuntu:26.04
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          ref: ${{ needs.validate.outputs.commit }}
+          persist-credentials: false
+      - name: Install system dependencies
+        run: bash .devcontainer/scripts/install-system.sh
+      - name: Install pinned build tools
+        run: bash .devcontainer/scripts/setup-tools.sh
+      - name: Build and test Windows x64 application
+        run: ./build.sh
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: keybind-build
+          path: |
+            dist/keybind-windows-x64.zip
+            dist/windows-x64/
+            build/metadata/keybind-build.json
+          if-no-files-found: error
+          retention-days: 7
+      - name: Upload build logs on failure
+        if: failure()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: keybind-build-logs
+          path: |
+            build/logs/
+            build/tests/
+          retention-days: 7
+
+  build-keepass:
+    needs: validate
+    runs-on: windows-2022
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          ref: ${{ needs.validate.outputs.commit }}
+          persist-credentials: false
+      - name: Test verified downloads
+        shell: powershell
+        run: .\tests\release\setup-download-tests.ps1
+      - name: Build and package the optional KeePass plugin
+        shell: powershell
+        run: |
+          $keepass = & .\.devcontainer\scripts\setup-keepass.ps1
+          & .\scripts\build-keepass.ps1 -KeePassPath $keepass -Package
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: keepass-build
+          path: |
+            dist/keybind-keepass-ime.zip
+            build/metadata/keepass-build.json
+          if-no-files-found: error
+          retention-days: 7
+
+  publish:
+    needs: [validate, build-keybind, build-keepass]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          ref: ${{ needs.validate.outputs.commit }}
+          persist-credentials: false
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        with:
+          pattern: '*-build'
+          path: .
+          merge-multiple: true
+      - name: Assemble and verify release assets
+        env:
+          RELEASE_TAG: ${{ needs.validate.outputs.tag }}
+        run: |
+          python3 scripts/release.py package --tag "$RELEASE_TAG" --repository "$GITHUB_REPOSITORY"
+          cd dist/release
+          sha256sum -c SHA256SUMS
+      - name: Publish GitHub Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ needs.validate.outputs.tag }}
+        run: |
+          gh release create "$RELEASE_TAG" \
+            --repo "$GITHUB_REPOSITORY" --verify-tag \
+            --title "Keybind ${RELEASE_TAG#v}" \
+            --notes-file dist/release/release-notes.md \
+            dist/release/keybind-windows-x64.zip \
+            dist/release/keybind-scoop-x64.zip \
+            dist/release/keybind-keepass-ime.zip \
+            dist/release/keybind.json \
+            dist/release/LICENSE \
+            dist/release/SHA256SUMS

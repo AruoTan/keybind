@@ -22,5 +22,14 @@
     "commit": "ceb648849dcc5760a7f4ed223308ffe3de0b51c6",
     "url": "https://codeload.github.com/Ciantic/VirtualDesktopAccessor/zip/ceb648849dcc5760a7f4ed223308ffe3de0b51c6",
     "sha256": "0e2ebbe51902447ca32e1d3f53031ec406f70f239db92b47a99df25ddd219f76"
+  },
+  "keepass": {
+    "version": "2.61.1",
+    "url": "https://downloads.sourceforge.net/project/keepass/KeePass%202.x/2.61.1/KeePass-2.61.1.zip",
+    "sha256": "3952354db9b117e906f7cd4f9f5591065b95186472370da47f46f3e246fea864",
+    "fallbackUrls": [
+      "https://phoenixnap.dl.sourceforge.net/project/keepass/KeePass%202.x/2.61.1/KeePass-2.61.1.zip",
+      "https://netix.dl.sourceforge.net/project/keepass/KeePass%202.x/2.61.1/KeePass-2.61.1.zip"
+    ]
   }
 }

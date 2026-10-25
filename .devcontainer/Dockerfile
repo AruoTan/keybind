@@ -1,4 +1,4 @@
-ARG BASE_IMAGE=aruowis-dev-base:1
+ARG BASE_IMAGE=aruowis-dev-base:latest
 FROM ${BASE_IMAGE}
 
 USER root

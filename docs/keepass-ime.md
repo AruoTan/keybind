@@ -13,6 +13,10 @@
 
 项目根目录 `./build.sh` 在 Linux 编译完整 `keybind.exe`，其中包含 AHK 输入法模块。C# 插件沿用独立 Windows 构建方式，不属于该 Linux 构建流程。
 
+## Release 按需下载
+
+Release 提供独立的 `keybind-keepass-ime.zip`。使用 KeePass 的用户可直接下载并解压到 KeePass 的 `Plugins` 目录，无需本机编译。Scoop 安装不会下载此插件或 KeePass。具体发布与安装步骤见 [发布说明](releasing.md)。
+
 ## 可选 C# 插件构建
 
 在 Windows 项目根目录执行，可显式指定 KeePass 路径：
@@ -23,6 +27,8 @@ powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\scripts\build-keepass.
 ```
 
 脚本优先使用传入的 KeePass 路径，否则查找 PATH 和当前用户 Scoop 目录。依赖 .NET Framework x64 C# 编译器以及对应 KeePass 程序；输出为 `dist/plugins/keepass-ime/KeybindImeBridge.dll`，中间文件位于 `build/keepass-ime/`。
+
+加 `-Package` 可生成独立的 `dist/keybind-keepass-ime.zip`，包含插件、许可证和部署说明；内部构建记录保存在 `build/metadata/keepass-build.json`；插件程序集版本从根目录 `VERSION` 生成。GitHub Release 的 Windows 任务会自动执行构建与打包。
 
 加 `-Test` 可运行无凭据的 IME 与跨进程通信测试，此时还需要 AutoHotkey v2 x64，可用 `-AhkPath` 指定便携运行时。测试会短暂显示空白测试框，日志和测试程序位于 `build/tests/keepass-ime/`。构建默认执行真实插件加载检查。
 

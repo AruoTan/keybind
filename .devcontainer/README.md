@@ -1,8 +1,8 @@
 # Linux 构建环境
 
-在 VS Code 执行 **Dev Containers: Rebuild Container** 即可。配置沿用原来的 `aruowis-dev-base:1`，现在通过本目录 Dockerfile 补充构建依赖，保留现有 AutoHotkey 扩展。目标环境为 Linux x86_64；当前基础镜像为 Ubuntu 26.04，Wine 10 的 WoW64 支持用于运行官方 32 位 Ahk2Exe。
+在 VS Code 执行 **Dev Containers: Rebuild Container** 即可。配置沿用原来的 `aruowis-dev-base:latest`，现在通过本目录 Dockerfile 补充构建依赖，保留现有 AutoHotkey 扩展。目标环境为 Linux x86_64；当前基础镜像为 Ubuntu 26.04，Wine 10 的 WoW64 支持用于运行官方 32 位 Ahk2Exe。
 
-镜像安装 MinGW x64 GCC/系统头文件、Wine、Xvfb、Xauth、字体、Python、jq 和 ZIP 工具，并以 `vscode` 用户安装固定版本的 Rust、Windows GNU 标准库、AutoHotkey 和 Ahk2Exe。没有 Windows SDK 或 Visual Studio 依赖。
+镜像安装 Linux 本机编译工具 `build-essential`（含 `cc`、链接器与系统头文件）、MinGW x64 GCC/Windows 头文件、Wine、Xvfb、Xauth、字体、Python、jq 和 ZIP 工具，并以 `vscode` 用户安装固定版本的 Rust、Windows GNU 标准库、AutoHotkey 和 Ahk2Exe。没有 Windows SDK 或 Visual Studio 依赖。
 
 ```bash
 # 创建容器后自动执行；也可手动检查
@@ -52,3 +52,7 @@ bash .devcontainer/scripts/setup-tools.sh
 构建使用独立 Xvfb 显示和 Wine 前缀，结束时只停止该前缀的 wineserver；同一工作区的并发构建通过文件锁拒绝。构建日志在 `build/logs/`，测试结果在 `build/tests/`，最终产物在 `dist/`。宿主 Windows 无需安装开发工具，部署及实机验证见 [功能说明](../docs/virtual-desktop.md)。
 
 AHK 的 `#Include` 统一使用 `%A_LineFile%/../` 定位当前文件所在目录，并使用 `/` 分隔路径，兼容 Linux 容器中的 AHK++ 路径解析和 Windows AutoHotkey。新增包含文件时沿用此约定，避免编辑器将 `%A_ScriptDir%` 解析为工作区根目录。
+
+GitHub Release 的 Linux 任务复用本目录 Bash 安装脚本和 `toolchain.json`，采用公开的 `ubuntu:26.04`，不依赖本地 `aruowis-dev-base:latest` 镜像。可选 KeePass 插件使用独立 Windows 任务，运行 `.devcontainer/scripts/setup-keepass.ps1` 下载并校验固定的 KeePass 构建参考；普通 Linux 开发不需要执行该脚本。发布流程见 [发布说明](../docs/releasing.md)。
+
+Rust 交叉编译仍需要 Linux 本机 `cc`，用于构建脚本和过程宏；`setup-tools.sh --check` 会先检查它。KeePass 下载按锁定地址与直连镜像依次尝试，只有 SHA256 匹配才缓存和解压；失败日志记录地址、实际哈希、字节数与识别出的文件格式。

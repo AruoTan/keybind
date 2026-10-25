@@ -98,6 +98,10 @@ def main():
                 WINDOWS_DIST.mkdir(parents=True, exist_ok=True)
                 for artifact in stage.iterdir():
                     artifact.replace(WINDOWS_DIST / artifact.name)
+                metadata_dir = BUILD / "metadata"
+                metadata_dir.mkdir(parents=True, exist_ok=True)
+                (stage.parent / "keybind-build.json").replace(metadata_dir / "keybind-build.json")
+                (WINDOWS_DIST / "manifest.json").unlink(missing_ok=True)
                 for name in ("keybind-windows-x64.zip", "SHA256SUMS"):
                     (stage.parent / name).replace(DIST / name)
             print("Ready: " + str(DIST / "keybind-windows-x64.zip"), flush=True)

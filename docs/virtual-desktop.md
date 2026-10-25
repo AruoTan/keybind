@@ -55,7 +55,8 @@ Windows 电脑不需要开发环境。DLL、主 EXE 和验证 EXE 都在 Linux x
 | `dist/keybind-windows-x64.zip` | 可复制到 Windows 的完整便携包 |
 | `dist/windows-x64/keybind.exe`、`VirtualDesktopAccessor.dll` | 日常运行所需程序与 DLL |
 | `dist/windows-x64/verify-virtual-desktop.exe`、`verify.bat` | Windows 上无需安装 AutoHotkey 的验证入口 |
-| `dist/windows-x64/manifest.json`、`dist/SHA256SUMS` | 工具版本、输入/产物哈希、PE 导出/依赖和实际测试范围 |
+| `build/metadata/keybind-build.json` | 内部构建记录：工具版本、输入/产物哈希、PE 导出/依赖和实际测试范围 |
+| `dist/SHA256SUMS` | 发布文件校验和 |
 | `build/tests/virtual-desktop/`、`build/logs/` | 控制器、ABI、Cargo 和编译日志 |
 
 便携 ZIP 包含许可证、运行说明和 AHK 输入源码。构建会验证三个二进制均为 Windows x64，DLL 具备全部所需导出，并拒绝遗漏的 MinGW/VC++ 开发运行库依赖。编译和测试成功后才发布新产物，旧版 EXE 保留在 `backups/keybind-legacy.exe`，不参与构建。

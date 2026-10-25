@@ -23,7 +23,7 @@ fail() { echo "$*" >&2; exit 1; }
 if [[ "$(uname -s)" != Linux || "$(uname -m)" != x86_64 ]]; then
     fail "The build environment must be Linux x86_64."
 fi
-for command_name in curl jq sha256sum unzip python3 x86_64-w64-mingw32-gcc xvfb-run xauth; do
+for command_name in cc curl jq sha256sum unzip python3 x86_64-w64-mingw32-gcc xvfb-run xauth; do
     command -v "$command_name" >/dev/null || fail "$command_name is missing. Rebuild the devcontainer."
 done
 wine_path=""
