@@ -1,0 +1,16 @@
+{
+    "name": "autohotkey",
+    "build": {
+        "dockerfile": "Dockerfile",
+        "context": ".."
+    },
+    "remoteUser": "vscode",
+    "postCreateCommand": "python3 scripts/setup_tools.py --check",
+    "customizations": {
+        "vscode": {
+            "extensions": [
+                "mark-wiemer.vscode-autohotkey-plus-plus"
+            ]
+        }
+    }
+}

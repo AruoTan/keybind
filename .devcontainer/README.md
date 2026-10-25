@@ -1,0 +1,39 @@
+# Linux 构建环境
+
+在 VS Code 执行 **Dev Containers: Rebuild Container** 即可。配置沿用原来的 `aruowis-dev-base:1`，现在通过本目录 Dockerfile 补充构建依赖，保留现有 AutoHotkey 扩展。目标环境为 Linux x86_64；当前基础镜像为 Ubuntu 26.04，Wine 10 的 WoW64 支持用于运行官方 32 位 Ahk2Exe。
+
+镜像安装 MinGW x64 GCC/系统头文件、Wine、Xvfb、Xauth、字体、Python、ZIP 工具，并以 `vscode` 用户安装固定版本的 Rust、Windows GNU 标准库、AutoHotkey 和 Ahk2Exe。没有 Windows SDK 或 Visual Studio 依赖。
+
+```bash
+# 创建容器后自动执行；也可手动检查
+python3 scripts/setup_tools.py --check
+
+# 构建 DLL、EXE、便携 ZIP，并执行控制器、GUID ABI 和实际窗口捕获测试
+./build.sh
+
+# 只运行容器测试
+./build.sh --test-only
+```
+
+版本、下载地址和 SHA256 固定在 `scripts/toolchain.json`。变更工具版本后执行 `python3 scripts/setup_tools.py`，或重建容器。首次镜像构建需要联网下载固定工具；首次 DLL 构建还需下载 Cargo.lock 指定的 crate。
+
+Cargo 构建优先使用显式 `CARGO_HTTP_PROXY`，否则使用容器代理环境变量或直连，不继承宿主 Git 中可能指向 Windows localhost 的代理。构建不会修改 Git 配置。
+
+如果尚未重建当前容器，可先安装 Dockerfile 中的系统依赖，再运行用户工具安装脚本：
+
+```bash
+sudo apt-get update
+sudo apt-get install -y --no-install-recommends \
+  binutils-mingw-w64-x86-64 ca-certificates curl file fonts-dejavu-core \
+  gcc-mingw-w64-x86-64-posix python3 unzip wine64 xauth xvfb zip
+python3 scripts/setup_tools.py
+```
+
+缓存位置：
+
+- `~/.cargo`、`~/.rustup`：固定 Rust 工具链、Windows 目标和 crate 下载缓存。
+- `~/.local/share/keybind-tools`：校验过的工具下载和便携可执行文件，可用 `KEYBIND_TOOLS_DIR` 指定其他目录。
+- `~/.cache/keybind/wine`：每个工作区独立的 Wine 前缀，位于容器本地磁盘，避免 Windows bind mount 上大量小文件带来的启动延迟。
+- `build/cache`：上游源码 ZIP 和 Cargo 交叉编译缓存。
+
+构建使用独立 Xvfb 显示和 Wine 前缀，结束时只停止该前缀的 wineserver；同一工作区的并发构建通过文件锁拒绝。构建日志在 `build/logs/`，测试结果在 `build/tests/`，最终产物在 `dist/`。宿主 Windows 无需安装开发工具，部署及实机验证见 [功能说明](../docs/virtual-desktop.md)。
