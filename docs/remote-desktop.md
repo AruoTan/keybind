@@ -23,7 +23,7 @@
 
 1. 在控制端退出旧程序，替换并启动新 `keybind.exe`；无需在被控端安装 keybind。
 2. Windows App 保留当前将 Win 组合键发给远端的连接设置即可。如果使用 `mstsc`，在“显示选项”→“本地资源”→“键盘”中将“应用 Windows 组合键”保持为“仅在使用全屏幕时”或“在远程计算机上”，然后重新连接。
-3. 进入全屏后稍等约一秒再测试以上四组按键。其他 Win 组合键由 RDP 按连接设置处理；keybind 的 `Win+Shift+S` 截图重映射和 `Win+Ctrl+Space` 置顶在 RDP 会话中让行，侧键和 KeePass 功能保持原有逻辑。
+3. 进入全屏后稍等约一秒再测试以上四组按键。其他 Win 组合键由 RDP 按连接设置处理；keybind 的 `Win+Ctrl+Space` 置顶在 RDP 会话中让行，侧键和 KeePass 功能保持原有逻辑。
 
 RDP 内置键盘设置按整类 Windows 组合键处理，没有这四组键的单独排除列表，见 [Microsoft 的键盘重定向说明](https://learn.microsoft.com/en-us/windows/win32/termserv/imsrdpclientsecuredsettings-keyboardhookmode)。设置为“在此计算机上”会把其他 Windows 组合键一起保留在本机，适合需要整体保留的场景。
 
@@ -80,5 +80,5 @@ Get-Content -LiteralPath (Join-Path ([Environment]::GetFolderPath('LocalApplicat
 - 使用 `Win+Ctrl` 离开 RDP，松开全部键，返回会话后立即测试 `Win+Shift`；无需额外按松 Ctrl。确认混合使用两类快捷键后仍能移动。
 - 在远端记事本中长按、快速交替、按住箭头更换 Shift/Ctrl，确认不会重复切换；松开后继续输入，确认 Win/Ctrl/Shift 没有卡住。
 - 测试先启动 keybind 再连接，以及已全屏连接后启动 keybind；覆盖退出/进入全屏、断线重连、多个会话、多显示器和不同缩放比例。
-- 测试 `Win+E`、`Win+R`、`Win+Shift+S` 仍由远端处理。退出会话焦点后回归本机截图、置顶、鼠标侧键、Snipaste 和 KeePass 输入法功能。
+- 测试 `Win+E`、`Win+R`、`Win+Shift+S` 仍由远端处理。退出会话焦点后回归本机置顶、鼠标侧键、资源管理器中键和 KeePass 输入法功能。
 - 如果 mstsc 以管理员权限运行，使用与日常一致的权限组合验证；程序不会自动提权。问题日志仍在 `%LOCALAPPDATA%\keybind\virtual-desktop.log`。

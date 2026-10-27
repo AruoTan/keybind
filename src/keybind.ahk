@@ -10,6 +10,5 @@
 #Include %A_LineFile%/../modules/remote-desktop/remote-desktop.ahk
 
 KeePassImeInit()
-MouseInit()
 if VirtualDesktopInit()
     RemoteDesktopInit()
