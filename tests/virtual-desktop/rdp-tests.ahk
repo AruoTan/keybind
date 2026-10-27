@@ -165,10 +165,15 @@ class FocusFixtureApi {
     __New(origin, destination := 0) {
         this.Origin := origin, this.Destination := destination
         this.Desktop := "source"
+        this.SourcePinned := false, this.SourceLocation := "source", this.FailSourceQuery := false
     }
     Current() => this.Desktop
-    WindowId(hwnd, *) => hwnd = this.Origin ? "source" : (hwnd = this.Destination ? "target" : "")
-    Pinned(*) => false
+    WindowId(hwnd, *) {
+        if hwnd = this.Origin && this.FailSourceQuery
+            throw Error("Injected hidden-source query failure")
+        return hwnd = this.Origin ? this.SourceLocation : (hwnd = this.Destination ? "target" : "")
+    }
+    Pinned(hwnd) => hwnd = this.Origin && this.SourcePinned
 }
 
 class EmptyDesktopFocus extends RDPSwitchFocus {
@@ -199,6 +204,20 @@ FocusHandoffTests(origin) {
         Check(DllCall("GetForegroundWindow", "Ptr") = destination.Hwnd,
             "RDP fixture must not retain focus on the new desktop")
         Check(!InStr(focus.Describe(), "input-focus=0"), "Target edit must have keyboard focus")
+        WinHide "ahk_id " origin
+        Check(focus.SourceOccupied(api, "source"),
+            "A deactivated hidden RDP client must continue occupying its original desktop")
+        api.SourcePinned := true
+        Check(!focus.SourceOccupied(api, "source"), "Pinned source windows must not block cleanup")
+        api.SourcePinned := false, api.SourceLocation := "target"
+        Check(!focus.SourceOccupied(api, "source"), "A moved source window must not retain its old desktop")
+        api.SourceLocation := "source", api.FailSourceQuery := true, rejected := false
+        try focus.SourceOccupied(api, "source")
+        catch
+            rejected := true
+        Check(rejected, "Unknown live source ownership must not authorize cleanup")
+        api.FailSourceQuery := false
+        DllCall("ShowWindow", "Ptr", origin, "Int", 8, "Int") ; SW_SHOWNA, preserve target focus.
         focus.Close()
         Check(DllCall("GetForegroundWindow", "Ptr") = destination.Hwnd,
             "Destroying the broker must not restore hidden RDP focus")

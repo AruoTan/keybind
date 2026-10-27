@@ -5,15 +5,17 @@
 | 快捷键 | 控制端行为 |
 | --- | --- |
 | `Win+Shift+←/→` | 将本机活动的 RDP 客户端窗口携带到相邻桌面并跟随；沿用边界创建、空源桌面清理规则 |
-| `Win+Ctrl+←/→` | 仅切换本机已有的相邻桌面；不移动窗口、不创建或删除桌面，边界无操作 |
+| `Win+Ctrl+←/→` | 切换本机相邻桌面，不携带窗口；边界自动创建，向左创建放到最左侧；切换并恢复焦点后清理空源桌面 |
 
-`Win+Ctrl` 在虚拟桌面模块初始化成功后由 keybind 在所有本机窗口统一处理，包括离开 RDP 后的桌面。可一直按住 Win+Ctrl，逐次按左右箭头连续往返，不必先松开修饰键。每次箭头按下执行一次，箭头松开后才允许下一次；忙碌期间的新请求仍丢弃。切换前用本机临时工具窗口激活本机输入，使源窗口失去前台焦点；确认桌面切换后恢复目标焦点。交接完成即销毁临时窗口，不产生新桌面，不计入源桌面应用占用，也不模拟鼠标点击、Alt+Tab 或强制松开仍按住的修饰键。边界按键不执行焦点交接。
+`Win+Ctrl` 在虚拟桌面模块初始化成功后由 keybind 在所有本机窗口统一处理，包括离开 RDP 后的桌面和没有活动应用窗口的空桌面。可一直按住 Win+Ctrl，逐次按左右箭头连续往返，不必先松开修饰键。每次箭头按下执行一次，箭头松开后才允许下一次；忙碌期间的新请求仍丢弃。切换前用本机临时工具窗口激活本机输入，使源窗口失去前台焦点；确认桌面切换后恢复目标焦点，再检查是否可清理源桌面。交接完成即销毁临时窗口；工具窗口不计入应用占用，也不模拟鼠标点击、Alt+Tab 或强制松开仍按住的修饰键。新建的目标桌面同样执行焦点交接。
+
+只清理刚离开的桌面，并在删除前重复扫描和核对 GUID、顺序与当前桌面；其他空桌面保留，至少保留一个桌面。最小化及其他桌面上被 Shell 隐藏的应用仍计入占用；固定在全部桌面的窗口不阻止清理，也不取消固定。RDP 会话失焦后可能隐藏窗口，因此额外跟踪本次离开前的活动应用：只要原窗口身份仍有效、未固定且仍属于源桌面，就保留源桌面。归属或固定状态查询失败也保留源桌面。后台宿主的识别规则与 `Win+Shift` 共用，见 [虚拟桌面说明](virtual-desktop.md)。创建、重排或切换失败时停止后续清理，仅尝试回收本次新建且确认空闲的桌面。
 
 按桌面 GUID 记住通过此流程离开前的活动窗口，优先在返回该桌面时激活它；失效、已关闭、已移动到其他桌面或已固定的记录会丢弃。记录最多 64 个桌面，包含 HWND、PID、线程及 RDP 标识，不持久化。一般应用最小化后不会因切换被还原；此前活动的 RDP 会话是例外：若客户端在失去焦点后隐藏或最小化其窗口，返回时使用原窗口的显示/还原和激活接口恢复，不改变窗口样式，不发送全屏切换快捷键。实际 Windows App 的全屏状态仍需实测。
 
 没有可用记忆窗口时，尝试目标桌面的其他非最小化应用，再尝试本机任务栏或桌面 Shell。此焦点记忆不跟踪任务视图或其他工具发起的所有切换。
 
-这针对用户反馈的“画面切换后键盘仍无响应，鼠标点击才恢复”：桌面 GUID 变化不等于键盘焦点完成切换。现在仅当焦点交接也成功时才返回 `switched`；若桌面已切换但焦点恢复失败，返回 `switched-unfocused` 并记录错误。该路径不会删除桌面；切换前无法解除 RDP 焦点则停止切换。失败恢复和窗口激活受 Windows 前台窗口规则约束，目标机仍需复测。
+这针对用户反馈的“画面切换后键盘仍无响应，鼠标点击才恢复”：桌面 GUID 变化不等于键盘焦点完成切换。焦点交接成功并完成占用检查时返回 `switched`（源桌面有应用时会正常保留）；桌面已切换但焦点恢复失败时返回 `switched-unfocused`，不清理源桌面。焦点恢复成功但占用检查或删除失败时返回 `switched-retained`，记录错误并保留源桌面。切换前无法解除 RDP 焦点则停止切换。失败恢复和窗口激活受 Windows 前台窗口规则约束，目标机仍需复测。
 
 `Win+Shift` 不会操作远端会话里的应用窗口。没有 RDP 窗口获得焦点时，`Win+Shift` 仍执行原有本机窗口移动逻辑。左右 Win、Shift 和 Ctrl 均可使用；两类操作共用忙碌保护。其他 Win 组合键继续沿用客户端与原有 keybind 规则。
 
@@ -49,7 +51,7 @@ RDP 内置键盘设置按整类 Windows 组合键处理，没有这四组键的�
 
 ## 失败诊断
 
-启动后，`%LOCALAPPDATA%\keybind\remote-desktop.log` 应出现 `Initialized physical keyboard hook v8 continuous navigation; mstsc + msrdc`。保留修饰键事件诊断；v8 统一处理连续 Win+Ctrl 切换和返回窗口焦点，尚不能据此认定所有残留修饰键问题已解决。进入会话后应出现 `Session active: msrdc.exe:...`（或 `mstsc.exe`）和 `Physical keyboard hook refreshed`。真正截获后应出现 `Captured switch Left` 或 `Captured move Right`，随后是 `Hotkey switch Left: switched`、`Hotkey move Right: moved` 等结果；`boundary` 表示本机已到边界，连发不会重复投递。
+启动后，`%LOCALAPPDATA%\keybind\remote-desktop.log` 应出现 `Initialized physical keyboard hook v8 continuous navigation; mstsc + msrdc`。保留修饰键事件诊断；v8 统一处理连续 Win+Ctrl 切换和返回窗口焦点，尚不能据此认定所有残留修饰键问题已解决。进入会话后应出现 `Session active: msrdc.exe:...`（或 `mstsc.exe`）和 `Physical keyboard hook refreshed`。真正截获后应出现 `Captured switch Left` 或 `Captured move Right`，随后是 `Hotkey switch Left: switched`、`Hotkey move Right: moved` 等结果。边界现在会创建桌面，连发仍不会重复投递；`switched-retained` 表示切换与焦点恢复成功，但源桌面清理遇到错误，详情见 `virtual-desktop.log`。
 
 `Win+Ctrl` 切换还会记录 `Source focus released before switch`，然后记录 `Remembered desktop window activated`、`Local application focus restored`、`Target desktop application activated` 或 `Local shell focus restored`。这些日志包含前台窗口和实际键盘焦点的 HWND，不含标题或应用内容。若仅有 `switched-unfocused` 或 `Desktop switched but local focus handoff failed`，不能当作输入恢复成功。
 
@@ -70,7 +72,8 @@ Get-Content -LiteralPath (Join-Path ([Environment]::GetFolderPath('LocalApplicat
 ## Windows 实机验收
 
 - 在本机准备两个桌面，全屏连接 RDP；分别测试左右 Win、左右 Shift/Ctrl 与箭头组合。
-- `Win+Ctrl` 只切换本机；RDP 窗口留在原桌面，远端桌面与窗口均不变化。回到 RDP 后反向测试；本机边界不创建桌面。
+- `Win+Ctrl` 只切换本机；RDP 窗口留在原桌面，远端桌面与窗口均不变化。左右边界各创建一个桌面，左侧新桌面应在最左侧；返回后确认 RDP 源桌面始终保留，离开的新空桌面被删除。
+- 不连接 RDP 时，在空桌面上测试相邻切换和双向边界创建，确认只回收本次离开的空源桌面，始终至少保留一个桌面。分别留下普通应用、最小化应用和固定应用，确认占用及固定状态处理符合规则。
 - 从全屏 RDP 用 `Win+Ctrl` 切到有本机应用、只有最小化应用和空桌面的三种目标，不点击鼠标，直接测试输入、再次 `Win+Ctrl+←/→`、`Win+E`、`Win+S`。目标桌面的键盘应立即可用，原 RDP 不应继续收到普通输入。原桌面 RDP 保留，最小化窗口不自动还原。
 - 始终按住 Win+Ctrl，逐次按右箭头切到两个相邻桌面，再逐次按左箭头返回。每次松开箭头，修饰键可持续按住超过一秒；确认连续切换不失效，长按箭头也不连发。返回原桌面后 RDP 应恢复前台及原全屏模式，不需要点击鼠标。另测试松开全部键后重新按组合返回。
 - `Win+Shift` 携带本机 RDP 窗口切换，覆盖左右边界创建和空源桌面删除；远端应用保持位置。

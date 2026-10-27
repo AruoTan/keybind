@@ -48,11 +48,14 @@ class RDPSwitchFocus {
         this.Broker := 0
         this.Switched := false
         this.Candidates := []
+        this.SourceToken := 0
     }
 
     Before(api, source, target) {
         if DllCall("GetForegroundWindow", "Ptr") != this.Origin
             throw Error("Foreground changed before RDP focus handoff")
+        if this.Windows.Ordinary(this.Origin)
+            this.SourceToken := this.Windows.Token(this.Origin)
         this.History.Remember(api, this.Windows, source, this.Origin)
         ; Preserve Z order and skip minimized windows. Merely switching must
         ; not restore minimized apps or move a window from another desktop.
@@ -70,6 +73,24 @@ class RDPSwitchFocus {
         if !this.Activate(this.Broker.Hwnd)
             throw Error("Cannot deactivate RDP before desktop switch")
         RemoteDesktopLog("Source focus released before switch; " this.Describe())
+    }
+
+    SourceOccupied(api, source) {
+        token := this.SourceToken
+        if !IsObject(token) || !this.Windows.Valid(token)
+            return false
+        try {
+            if api.Pinned(token.Hwnd)
+                return false
+            location := api.WindowId(token.Hwnd)
+            return this.Windows.Valid(token) && location = source
+        }
+        catch as err {
+            if this.Windows.Valid(token)
+                throw Error("Source desktop occupancy check failed: " VDErrorText(err), ,
+                    this.Windows.Describe(token))
+            return false
+        }
     }
 
     Eligible(api, token, target) {

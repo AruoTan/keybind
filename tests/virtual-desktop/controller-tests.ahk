@@ -17,8 +17,14 @@ try {
         AssignedFrameStillOccupies, FrameReturnsBeforeRemoval, FrameInspectionFailure,
         SwitchExisting, SwitchBoundaries, SwitchWithoutWindow, SwitchFailureOnly,
         SwitchQueryFailure, SwitchBusy, SwitchInvalidDirection, SwitchPressLatch,
+        SwitchEmptySource, SwitchSingleEmptyDesktop, SwitchPinnedSource, SwitchUnassignedSource,
+        SwitchUntrackedSource, SwitchUnknownSource, SwitchLateApplication, SwitchCleanupFailure,
+        SwitchBoundaryFailures, SwitchOccupiedCreatedFailure, SwitchPartialFailure,
+        SwitchConcurrentRequests, SwitchOrderChangedAfterGo, SwitchContinuousCreation,
+        SwitchFocusBeforeCreatedFailure, SwitchFocusAfterCreatedFailure,
         SwitchFocusOrder, SwitchFocusBeforeFailure, SwitchFocusAfterFailure,
-        SwitchFocusApiFailure, SwitchFocusBoundary, SwitchFocusOrderChanged, SwitchFocusCloseFailure] {
+        SwitchFocusApiFailure, SwitchFocusBoundary, SwitchFocusOrderChanged, SwitchFocusCloseFailure,
+        SwitchHiddenSourceProtection, SwitchSourceProtectionFailure] {
         test.Call()
         count += 1
     }
@@ -39,17 +45,21 @@ SwitchExisting() {
     r := Rig(["A", "B", "C"], "B")
     Assert(r.Controller.Switch(-1) = "switched" && r.Api.Desktop = "A")
     Assert(r.Controller.Switch(1) = "switched" && r.Api.Desktop = "B")
-    Assert(r.Api.Locations[101] = "B" && VDOrder(r.Api.Ids) = "A|B|C|")
-    Assert(r.Windows.ScanCount = 0, "Plain switching must not scan or remove empty desktops")
+    Assert(r.Api.Locations[101] = "B" && VDOrder(r.Api.Ids) = "B|C|",
+        "Switching back must collect the empty source without moving the app")
     for call in r.Api.Calls
-        Assert(call = "Snapshot" || call = "Go", "Plain switching must only query and switch")
+        Assert(call != "MoveWindow" && call != "Create" && call != "Reorder",
+            "Existing neighbors must be used without moving windows or creating desktops")
 }
 
 SwitchBoundaries() {
-    r := Rig(["A"])
-    Assert(r.Controller.Switch(-1) = "boundary")
-    Assert(r.Controller.Switch(1) = "boundary")
-    Assert(VDOrder(r.Api.Ids) = "A|" && !r.Controller.Busy)
+    r := Rig(["A", "B"])
+    Assert(r.Controller.Switch(-1) = "switched")
+    Assert(VDOrder(r.Api.Ids) = "N1|A|B|" && r.Api.Desktop = "N1")
+    Assert(r.Api.Locations[101] = "A", "Left creation must not carry the source window")
+    r := Rig(["A", "B"], "B")
+    Assert(r.Controller.Switch(1) = "switched")
+    Assert(VDOrder(r.Api.Ids) = "A|B|N1|" && r.Api.Desktop = "N1" && !r.Controller.Busy)
 }
 
 SwitchWithoutWindow() {
@@ -101,6 +111,182 @@ SwitchPressLatch() {
     finally VirtualDesktopState := 0
 }
 
+SwitchEmptySource() {
+    r := Rig(["A", "B", "C"], "B"), r.Api.Locations.Clear(), r.Windows.Active := false
+    r.Api.Locations[102] := "A"
+    Assert(r.Controller.Switch(1) = "switched")
+    Assert(VDOrder(r.Api.Ids) = "A|C|" && r.Api.Desktop = "C" && r.Windows.ScanCount = 2)
+    Assert(r.Controller.Switch(-1) = "switched")
+    Assert(VDOrder(r.Api.Ids) = "A|" && r.Api.Desktop = "A",
+        "Resolve GUIDs again after deleting the middle desktop")
+}
+
+SwitchSingleEmptyDesktop() {
+    for direction in [-1, 1] {
+        r := Rig(["A"]), r.Api.Locations.Clear(), r.Windows.Active := false
+        Assert(r.Controller.Switch(direction) = "switched")
+        Assert(VDOrder(r.Api.Ids) = "N1|" && r.Api.Desktop = "N1",
+            "Create a target before collecting the sole empty desktop")
+        Assert(r.Api.Locations.Count = 0 && r.Windows.ScanCount = 2)
+    }
+}
+
+SwitchPinnedSource() {
+    r := Rig(), r.Api.Pins[101] := true
+    Assert(r.Controller.Switch(1) = "switched")
+    Assert(VDOrder(r.Api.Ids) = "B|" && r.Api.Pins[101],
+        "Pinned windows must not occupy the source or lose their pinned state")
+    for call in r.Api.Calls
+        Assert(call != "MoveWindow", "Ctrl+Win must never move a pinned window")
+}
+
+SwitchUnassignedSource() {
+    r := Rig(), r.Api.Locations[101] := "", r.Api.PinFailures[101] := true
+    Assert(r.Controller.Switch(1) = "switched" && VDOrder(r.Api.Ids) = "B|")
+}
+
+SwitchUntrackedSource() {
+    r := MissingFrameRig(), r.Api.Locations.Delete(101)
+    Assert(r.Controller.Switch(1) = "switched" && VDOrder(r.Api.Ids) = "B|",
+        "Switch cleanup must reuse the guarded background-frame exception")
+}
+
+SwitchUnknownSource() {
+    for pinFailure in [false, true] {
+        r := Rig()
+        if pinFailure
+            r.Api.PinFailures[101] := true
+        else
+            r.Api.Locations[101] := "?"
+        Assert(r.Controller.Switch(1) = "switched-retained")
+        Assert(VDOrder(r.Api.Ids) = "A|B|" && r.Api.Desktop = "B" && !r.Controller.Busy)
+        Assert(r.Messages.Length = 1 && InStr(r.Messages[1], "occupancy check failed"))
+    }
+}
+
+SwitchLateApplication() {
+    r := Rig(), r.Api.Locations.Clear()
+    r.Windows.OnScan := (number) => number = 2 ? r.Api.Locations[102] := "A" : 0
+    Assert(r.Controller.Switch(1) = "switched")
+    Assert(VDOrder(r.Api.Ids) = "A|B|" && r.Windows.ScanCount = 2,
+        "A new source application between scans must prevent deletion")
+}
+
+SwitchCleanupFailure() {
+    r := Rig(), r.Api.Locations.Clear(), r.Api.Fail := "Remove"
+    Assert(r.Controller.Switch(1) = "switched-retained")
+    Assert(r.Api.Desktop = "B" && VDOrder(r.Api.Ids) = "A|B|" && !r.Controller.Busy)
+    Assert(r.Messages.Length = 1)
+}
+
+SwitchBoundaryFailures() {
+    for direction in [-1, 1] {
+        for failure in ["Create", "Reorder", "SilentReorder", "Go", "SilentGo"] {
+            if direction = 1 && (failure = "Reorder" || failure = "SilentReorder")
+                continue
+            r := Rig(["A"])
+            if failure = "SilentGo"
+                r.Api.SilentGo := true
+            else if failure = "SilentReorder"
+                r.Api.SilentReorder := true
+            else
+                r.Api.Fail := failure
+            Assert(r.Controller.Switch(direction) = "failed")
+            Assert(VDOrder(r.Api.Ids) = "A|" && r.Api.Desktop = "A" && !r.Controller.Busy,
+                "Failed boundary operations must reclaim only their empty created desktop")
+            Assert(r.Api.Locations[101] = "A")
+            for call in r.Api.Calls {
+                Assert(call != "MoveWindow")
+                if failure = "Create" || failure = "Reorder" || failure = "SilentReorder"
+                    Assert(call != "Go", "Creation/reorder failure must stop before switching")
+            }
+        }
+    }
+}
+
+SwitchOccupiedCreatedFailure() {
+    r := Rig(["A"]), r.Api.Fail := "Go"
+    r.Api.AfterCreate := (id) => r.Api.Locations[102] := id
+    Assert(r.Controller.Switch(1) = "failed")
+    Assert(VDOrder(r.Api.Ids) = "A|N1|" && r.Api.Locations[102] = "N1",
+        "Failed switching must not reclaim a created desktop that acquired an app")
+}
+
+SwitchPartialFailure() {
+    r := Rig(["A"]), r.Api.Locations.Clear(), r.Api.ThrowAfterGo := true
+    Assert(r.Controller.Switch(1) = "failed")
+    Assert(r.Api.Desktop = "N1" && VDOrder(r.Api.Ids) = "A|N1|",
+        "An unconfirmed partial switch must not delete either desktop")
+}
+
+SwitchConcurrentRequests() {
+    r := Rig(), results := []
+    r.Windows.OnScan := (number) => results.Push(r.Controller.Switch(-1), r.Controller.Move(-1))
+    Assert(r.Controller.Switch(1) = "switched")
+    Assert(results.Length = 2 && results[1] = "busy" && results[2] = "busy" && !r.Controller.Busy)
+}
+
+SwitchOrderChangedAfterGo() {
+    r := Rig(), r.Api.Locations.Clear()
+    r.Api.AfterGo := (id) => r.Api.Ids.Push("external")
+    Assert(r.Controller.Switch(1) = "switched-retained")
+    Assert(VDOrder(r.Api.Ids) = "A|B|external|" && r.Api.Desktop = "B",
+        "External order changes must stop source cleanup")
+}
+
+SwitchContinuousCreation() {
+    r := Rig(["A"])
+    for expected in ["N1", "N2", "N3"] {
+        Assert(r.Controller.Switch(1) = "switched" && r.Api.Desktop = expected)
+        Assert(VDOrder(r.Api.Ids) = "A|" expected "|" && r.Api.Locations[101] = "A",
+            "Continuous boundary navigation must collect only the empty previous target")
+    }
+    Assert(r.Controller.Switch(-1) = "switched" && r.Api.Desktop = "A")
+    Assert(VDOrder(r.Api.Ids) = "A|", "Return to the original application desktop without moving it")
+}
+
+SwitchFocusBeforeCreatedFailure() {
+    r := Rig(["A"]), focus := FakeSwitchFocus(), focus.FailBefore := true
+    Assert(r.Controller.Switch(-1, focus) = "failed")
+    Assert(VDOrder(r.Api.Ids) = "A|" && r.Api.Desktop = "A")
+    Assert(VDOrder(focus.Calls) = "before|close|" && !r.Controller.Busy)
+}
+
+SwitchFocusAfterCreatedFailure() {
+    r := Rig(["A"]), r.Api.Locations.Clear(), focus := FakeSwitchFocus(), focus.FailAfter := true
+    Assert(r.Controller.Switch(-1, focus) = "switched-unfocused")
+    Assert(VDOrder(r.Api.Ids) = "N1|A|" && r.Api.Desktop = "N1" && r.Windows.ScanCount = 0,
+        "Unrestored target focus must retain the empty source")
+    Assert(VDOrder(focus.Calls) = "before|after|close|" && !r.Controller.Busy)
+}
+
+class HiddenSourceFocus extends FakeSwitchFocus {
+    __New() {
+        super.__New()
+        this.Unknown := false
+    }
+    SourceOccupied(api, source) {
+        Assert(api.Current() != source, "Check the original window after switching")
+        if this.Unknown
+            throw Error("Original hidden application ownership is unknown")
+        return true
+    }
+}
+
+SwitchHiddenSourceProtection() {
+    r := Rig(), r.Api.Locations.Clear(), focus := HiddenSourceFocus()
+    Assert(r.Controller.Switch(1, focus) = "switched")
+    Assert(VDOrder(r.Api.Ids) = "A|B|" && r.Windows.ScanCount = 0,
+        "A known hidden source application must retain its desktop")
+    Assert(VDOrder(focus.Calls) = "before|after|close|")
+}
+
+SwitchSourceProtectionFailure() {
+    r := Rig(), r.Api.Locations.Clear(), focus := HiddenSourceFocus(), focus.Unknown := true
+    Assert(r.Controller.Switch(1, focus) = "switched-retained")
+    Assert(VDOrder(r.Api.Ids) = "A|B|" && r.Api.Desktop = "B" && !r.Controller.Busy)
+}
+
 class FakeSwitchFocus {
     __New() {
         this.Calls := [], this.FailBefore := false, this.FailAfter := false
@@ -128,6 +314,8 @@ class FakeSwitchFocus {
 
 SwitchFocusOrder() {
     r := Rig(), focus := FakeSwitchFocus()
+    r.Windows.OnScan := (number) => Assert(VDOrder(focus.Calls) = "before|after|",
+        "Source cleanup must follow target focus restoration")
     Assert(r.Controller.Switch(1, focus) = "switched")
     Assert(VDOrder(focus.Calls) = "before|after|close|" && !r.Controller.Busy)
     Assert(r.Api.Locations[101] = "A", "Focus handoff must not move the RDP window")
@@ -149,8 +337,10 @@ SwitchFocusApiFailure() {
 }
 SwitchFocusBoundary() {
     r := Rig(["A"]), focus := FakeSwitchFocus()
-    Assert(r.Controller.Switch(1, focus) = "boundary")
-    Assert(VDOrder(focus.Calls) = "close|", "Boundary presses must leave foreground unchanged")
+    Assert(r.Controller.Switch(1, focus) = "switched")
+    Assert(r.Api.Desktop = "N1" && r.Api.Locations[101] = "A")
+    Assert(VDOrder(focus.Calls) = "before|after|close|",
+        "New desktops need the same focus handoff as existing neighbors")
 }
 SwitchFocusOrderChanged() {
     r := Rig(), focus := FakeSwitchFocus(), focus.Reorder := true
@@ -192,6 +382,7 @@ class FakeApi {
         this.Calls := [], this.Fail := "", this.Serial := 0
         this.SilentMove := false, this.SilentGo := false, this.ThrowAfterGo := false
         this.AfterMove := 0, this.OnWindowId := 0, this.PinFailures := Map()
+        this.AfterCreate := 0, this.AfterGo := 0, this.SilentReorder := false
     }
     Check(name) {
         this.Calls.Push(name)
@@ -233,10 +424,14 @@ class FakeApi {
         this.Check("Create")
         id := "N" (++this.Serial)
         this.Ids.Push(id)
+        if IsObject(this.AfterCreate)
+            this.AfterCreate.Call(id)
         return id
     }
     Reorder(id, index) {
         this.Check("Reorder")
+        if this.SilentReorder
+            return
         this.Ids.RemoveAt(this.Index(id) + 1)
         this.Ids.InsertAt(index + 1, id)
     }
@@ -255,6 +450,8 @@ class FakeApi {
         if !this.SilentGo
             this.Desktop := id
         this.SilentGo := false
+        if IsObject(this.AfterGo)
+            this.AfterGo.Call(id)
         if this.ThrowAfterGo {
             this.ThrowAfterGo := false
             throw Error("Go changed desktop before reporting failure")

@@ -48,9 +48,36 @@ try {
         createdLeft := api.Current()
         if api.Index(createdLeft) != 0 || api.WindowId(fixture.Hwnd) != createdLeft
             throw Error("Left-created desktop identity/order failed")
+        ; Exercise Ctrl+Win behavior using only test-owned source desktops.
+        ; The fixture stays on createdLeft throughout all four switches.
+        if controller.Switch(-1) != "switched"
+            throw Error("Left-boundary desktop-only switch failed")
+        emptyLeft := api.Current()
+        if api.Index(emptyLeft) != 0 || api.WindowId(fixture.Hwnd) != createdLeft
+            throw Error("Desktop-only left creation moved the fixture or used the wrong position")
+        if controller.Switch(1) != "switched" || api.Current() != createdLeft
+            throw Error("Return from empty left desktop failed")
+        for id in api.Snapshot() {
+            if id = emptyLeft
+                throw Error("Empty left source was not collected")
+        }
+        api.Reorder(createdLeft, api.Snapshot().Length - 1)
+        controller.Await(() => api.Index(createdLeft) = api.Snapshot().Length - 1)
+        if controller.Switch(1) != "switched"
+            throw Error("Right-boundary desktop-only switch failed")
+        emptyRight := api.Current()
+        if api.Index(emptyRight) != api.Snapshot().Length - 1 || api.WindowId(fixture.Hwnd) != createdLeft
+            throw Error("Desktop-only right creation moved the fixture or used the wrong position")
+        if controller.Switch(-1) != "switched" || api.Current() != createdLeft
+            throw Error("Return from empty right desktop failed")
+        for id in api.Snapshot() {
+            if id = emptyRight
+                throw Error("Empty right source was not collected")
+        }
         for id in baseline
             api.Index(id)
         FileAppend "PASS: real create, reorder, window move, switch, focus and empty-source removal`n", logPath, "UTF-8"
+        FileAppend "PASS: desktop-only boundary creation in both directions, no window move and empty-source collection`n", logPath, "UTF-8"
     }
 }
 catch as err {

@@ -4,9 +4,9 @@ Windows AutoHotkey v2 快捷键程序，包含鼠标侧键、Snipaste 手势、�
 
 Windows App（`msrdc.exe`）或自带远程桌面（`mstsc.exe`）全屏时，可将 `Win+Shift+←/→` 和 `Win+Ctrl+←/→` 保留在控制端，分别携带本机 RDP 窗口切换桌面、仅切换本机桌面；其他 Win 组合键沿用远程桌面的转发设置。使用、诊断日志与实机验收见 [RDP 快捷键](docs/remote-desktop.md)。
 
-虚拟桌面模块初始化成功后，`Win+Ctrl+←/→` 在本机统一由 keybind 处理：可持续按住 Win+Ctrl，逐次按左右箭头跨桌面往返，返回时恢复此前活动的 RDP 会话窗口。长按箭头不连续切换。
+虚拟桌面模块初始化成功后，`Win+Ctrl+←/→` 在本机统一由 keybind 处理：不携带窗口，方向上没有桌面时自动创建（向左创建放到最左侧），切换及焦点恢复成功后回收空源桌面；没有活动窗口也可操作。可持续按住 Win+Ctrl，逐次按左右箭头跨桌面往返，返回时恢复此前活动的 RDP 会话窗口。长按箭头不连续切换。
 
-当前版本 `2.0.1`，许可证为 [GPL-3.0-only](LICENSE)。在 Linux devcontainer 中构建 Windows x64 成品，Windows 端不需要开发环境。
+当前版本 `2.1.0`，许可证为 [GPL-3.0-only](LICENSE)。在 Linux devcontainer 中构建 Windows x64 成品，Windows 端不需要开发环境。
 
 首次 Release 发布后，可通过 Scoop 安装：
 

@@ -98,22 +98,34 @@ class VDController {
         }
     }
 
-    ; Used by the local RDP shortcut. Never move windows, create desktops or
-    ; collect empty desktops for an ordinary Ctrl+Win desktop switch.
+    ; Ctrl+Win switches without moving windows, including from an empty desktop.
+    ; Extend at either boundary and collect only the confirmed-empty source.
     Switch(direction, focus := 0) {
         if direction != -1 && direction != 1
             throw ValueError("Direction must be -1 or 1")
         if this.Busy
             return "busy"
         this.Busy := true
-        switched := false
+        source := "", target := "", created := ""
+        switched := false, focused := false
         try {
             order := this.Api.Snapshot()
             source := this.Api.Current()
             index := this.Find(order, source) + direction
-            if index < 0 || index >= order.Length
-                return "boundary"
-            target := order[index + 1]
+            this.CheckOrder(order)
+            if index < 0 || index >= order.Length {
+                created := this.Api.Create()
+                order.Push(created)
+                this.Await(() => VDOrder(this.Api.Snapshot()) = VDOrder(order))
+                target := created
+                if direction = -1 {
+                    this.Api.Reorder(created, 0)
+                    order.Pop()
+                    order.InsertAt(1, created)
+                    this.Await(() => VDOrder(this.Api.Snapshot()) = VDOrder(order))
+                }
+            } else
+                target := order[index + 1]
             this.CheckOrder(order)
             if this.Api.Current() != source
                 throw Error("Current desktop changed before switch")
@@ -128,11 +140,19 @@ class VDController {
             switched := true
             if IsObject(focus) && !focus.After(this.Api, source, target)
                 throw Error("Desktop switched, but local keyboard focus could not be restored")
+            focused := true
+            ; RDP may hide its fullscreen window after deactivation. A known
+            ; source app still assigned there must survive a visibility scan.
+            if !IsObject(focus) || !HasMethod(focus, "SourceOccupied")
+                || !focus.SourceOccupied(this.Api, source)
+                this.RemoveIfEmpty(source, target, order)
             return "switched"
         }
         catch as err {
+            if created != "" && !switched
+                this.ReclaimCreated(created, source)
             this.Report.Call(VDErrorText(err))
-            return switched ? "switched-unfocused" : "failed"
+            return switched ? (focused ? "switched-retained" : "switched-unfocused") : "failed"
         }
         finally {
             if IsObject(focus) {
