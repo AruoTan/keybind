@@ -6,7 +6,7 @@ Windows App（`msrdc.exe`）或自带远程桌面（`mstsc.exe`）全屏时，�
 
 虚拟桌面模块初始化成功后，`Win+Ctrl+←/→` 在本机统一由 keybind 处理：可持续按住 Win+Ctrl，逐次按左右箭头跨桌面往返，返回时恢复此前活动的 RDP 会话窗口。长按箭头不连续切换。
 
-当前版本 `2.0.0`，许可证为 [GPL-3.0-only](LICENSE)。在 Linux devcontainer 中构建 Windows x64 成品，Windows 端不需要开发环境。
+当前版本 `2.0.1`，许可证为 [GPL-3.0-only](LICENSE)。在 Linux devcontainer 中构建 Windows x64 成品，Windows 端不需要开发环境。
 
 首次 Release 发布后，可通过 Scoop 安装：
 

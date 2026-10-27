@@ -35,6 +35,12 @@ try {
     ExpectFailure(() => fallback.WindowId(102), "Window has no assigned virtual desktop")
     ExpectFailure(() => fallback.WindowId(103, true), "HRESULT 0x80004005")
     ExpectFailure(() => fallback.WindowId(105, true), "HRESULT 0x00000001")
+    ExpectFailure(() => fallback.WindowId(106, true), "HRESULT 0x8002802B")
+    try fallback.WindowId(106, true)
+    catch as err {
+        if !(err is VDWindowQueryError) || err.Hwnd != 106 || err.HResult != 0x8002802B
+            throw Error("COM failure must preserve structured HWND and HRESULT")
+    }
     ExpectFailure(() => api.Id(99), "No desktop GUID returned")
     api.Procs["GetDesktopIdByNumber"] := DllCall("GetProcAddress", "Ptr", api.Module,
         "AStr", "InvalidGuidReturn", "Ptr")

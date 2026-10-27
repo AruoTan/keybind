@@ -197,6 +197,14 @@ class VDController {
             catch as err {
                 ; Windows can disappear during a shell query. Live windows with
                 ; unknown ownership/pin state still prevent desktop removal.
+                if !this.Windows.Valid(token)
+                    continue
+                ignoreFrame := false
+                ; A failed classification must retain the original query error
+                ; and fail closed, including when DWM state is unavailable.
+                try ignoreFrame := this.Windows.UntrackedFrame(token, err)
+                if ignoreFrame
+                    continue
                 if this.Windows.Valid(token)
                     throw Error("Source desktop occupancy check failed: " VDErrorText(err), ,
                         this.Windows.Describe(token))

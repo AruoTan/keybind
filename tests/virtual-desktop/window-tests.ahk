@@ -14,6 +14,9 @@ try {
         && InStr(description, "class AutoHotkeyGUI") && !InStr(description, "Keybind window"),
         "Window diagnostics must identify the class/handle without logging its title")
     Check(windows.Ordinary(main.Hwnd), "Normal GUI must count as application")
+    Check(!IsObject(windows.FrameState(token))
+        && !windows.UntrackedFrame(token, VDWindowQueryError(main.Hwnd, 0x8002802B)),
+        "An ordinary app must not be treated as an untracked ApplicationFrameHost frame")
     main.Minimize()
     Check(windows.Ordinary(main.Hwnd), "Minimized GUI must count as application")
     main.Restore()
@@ -25,7 +28,10 @@ try {
             "Int*", &cloak, "UInt", 4, "Int")
         if hr < 0
             throw Error("Cannot cloak fixture for classification test")
+        Check(windows.Cloak(main.Hwnd) & 1, "Cloak query must preserve DWM_CLOAKED_APP")
         Check(windows.Ordinary(main.Hwnd), "Cloaked GUI must count as application")
+        Check(!windows.UntrackedFrame(token, VDWindowQueryError(main.Hwnd, 0x8002802B)),
+            "App-cloaked ordinary windows must not be ignored on query failure")
         cloak := 0
         DllCall("dwmapi\DwmSetWindowAttribute", "Ptr", main.Hwnd, "UInt", 13,
             "Int*", &cloak, "UInt", 4, "Int")

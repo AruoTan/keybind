@@ -1,4 +1,13 @@
 ; VirtualDesktopAccessor exports and Windows x64 GUID ABI.
+class VDWindowQueryError extends Error {
+    __New(hwnd, hresult) {
+        super.__New("GetWindowDesktopId query failed", -1,
+            Format("HWND 0x{:X}; HRESULT 0x{:08X}", hwnd, hresult & 0xFFFFFFFF))
+        this.Hwnd := hwnd
+        this.HResult := hresult & 0xFFFFFFFF
+    }
+}
+
 class VDNative {
     __New(path) {
         if A_PtrSize != 8
@@ -86,11 +95,11 @@ class VDNative {
         desktopId := Buffer(16, 0)
         ; IVirtualDesktopManager::GetWindowDesktopId, vtable slot 4. Unlike
         ; the DLL's struct return, this has an explicit GUID output parameter.
-        ; Preserve HRESULT: only S_OK + GUID_NULL means an unassigned window.
+        ; Preserve HRESULT: failed calls are not unassigned windows. Cleanup
+        ; may separately recognize an inactive, untracked application frame.
         hr := ComCall(4, this.Manager(), "Ptr", hwnd, "Ptr", desktopId, "Int")
         if hr != 0
-            throw Error("GetWindowDesktopId query failed", ,
-                Format("HWND 0x{:X}; HRESULT 0x{:08X}", hwnd, hr & 0xFFFFFFFF))
+            throw VDWindowQueryError(hwnd, hr)
         if !(NumGet(desktopId, 0, "UInt64") | NumGet(desktopId, 8, "UInt64"))
             return ""
         return this.FormatGuid(desktopId.Ptr)

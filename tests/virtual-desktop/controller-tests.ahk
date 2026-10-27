@@ -13,6 +13,8 @@ try {
         ForegroundChanged, FixedWindowDoesNotOccupy, PinnedGroupMember, LastDesktopGuard,
         HotkeyPressLatch, FailureIncludesContext, UnassignedWindow,
         UnassignedActiveWindow, WindowClosesDuringOccupancy, CleanupPinQueryFailure,
+        UntrackedBackgroundFrame, UntrackedFrameStateGuards, UntrackedFrameErrorGuards,
+        AssignedFrameStillOccupies, FrameReturnsBeforeRemoval, FrameInspectionFailure,
         SwitchExisting, SwitchBoundaries, SwitchWithoutWindow, SwitchFailureOnly,
         SwitchQueryFailure, SwitchBusy, SwitchInvalidDirection, SwitchPressLatch,
         SwitchFocusOrder, SwitchFocusBeforeFailure, SwitchFocusAfterFailure,
@@ -269,11 +271,12 @@ class FakeApi {
     }
 }
 
-class FakeWindows {
+class FakeWindows extends VDWindows {
     __New(api) {
         this.Api := api, this.Active := true, this.CanFocus := true
         this.Members := [101], this.AfterCapture := 0, this.OnScan := 0
         this.ScanCount := 0
+        this.Frames := Map(), this.FrameFailure := false
     }
     Token(hwnd) => {Hwnd: hwnd, Pid: 1, Thread: 1}
     Capture() {
@@ -288,6 +291,11 @@ class FakeWindows {
         return group
     }
     Valid(token) => this.Api.Locations.Has(token.Hwnd)
+    FrameState(token) {
+        if this.FrameFailure
+            throw Error("Injected frame inspection failure")
+        return this.Frames.Has(token.Hwnd) ? this.Frames[token.Hwnd] : 0
+    }
     Describe(token) => Format("HWND 0x{:X}; PID {}; class Fixture", token.Hwnd, token.Pid)
     StillActive(group) => this.Active
     Focus(group) => this.CanFocus
@@ -505,4 +513,74 @@ CleanupPinQueryFailure() {
     Assert(r.Messages.Length = 1 && InStr(r.Messages[1], "occupancy check failed"))
     Assert(InStr(r.Messages[1], "HWND 0x66") && InStr(r.Messages[1], "class Fixture"),
         "Cleanup errors must identify the blocker without window contents")
+}
+
+MissingFrameRig() {
+    r := Rig(), r.Api.Locations[102] := "?"
+    r.Api.OnWindowId := (hwnd) => hwnd = 102 ? MissingFrameQuery(hwnd) : 0
+    r.Windows.Frames[102] := {Cloak: 1, CoreWindow: false, Minimized: false, Foreground: false}
+    return r
+}
+
+MissingFrameQuery(hwnd) {
+    throw VDWindowQueryError(hwnd, 0x8002802B)
+}
+
+UntrackedBackgroundFrame() {
+    r := MissingFrameRig()
+    Assert(r.Controller.Move(1) = "moved")
+    Assert(VDOrder(r.Api.Ids) = "B|" && r.Windows.ScanCount = 2,
+        "Confirmed inactive untracked frames must not block either cleanup scan")
+    Assert(r.Messages.Length = 0, "Recognized background frames must not show an error")
+}
+
+UntrackedFrameStateGuards() {
+    for flags in [0, 2, 3, 4, 5, 6, 7, 8] {
+        r := MissingFrameRig(), r.Windows.Frames[102].Cloak := flags
+        Assert(r.Controller.Move(1) = "moved-retained" && VDOrder(r.Api.Ids) = "A|B|",
+            "Shell, inherited, visible and unknown cloak states must retain the desktop")
+    }
+    for property in ["CoreWindow", "Minimized", "Foreground"] {
+        r := MissingFrameRig(), r.Windows.Frames[102].%property% := true
+        Assert(r.Controller.Move(1) = "moved-retained" && VDOrder(r.Api.Ids) = "A|B|",
+            "Real UWP content, minimized or active frames must retain the desktop")
+    }
+    r := MissingFrameRig(), r.Windows.Frames.Clear()
+    Assert(r.Controller.Move(1) = "moved-retained",
+        "Missing views outside ApplicationFrameHost must not be ignored")
+}
+
+UntrackedFrameErrorGuards() {
+    for failure in [Error("GetWindowDesktopId query failed", , "HRESULT 0x8002802B"),
+        VDWindowQueryError(102, 0x80004005), VDWindowQueryError(102, 0x80070005),
+        VDWindowQueryError(102, 1), VDWindowQueryError(999, 0x8002802B)] {
+        r := MissingFrameRig()
+        r.Api.OnWindowId := (hwnd) => hwnd = 102 ? RaiseFrameQuery(failure) : 0
+        Assert(r.Controller.Move(1) = "moved-retained" && VDOrder(r.Api.Ids) = "A|B|",
+            "Unrelated failures and mismatched HWNDs must not authorize removal")
+    }
+}
+
+RaiseFrameQuery(failure) {
+    throw failure
+}
+
+AssignedFrameStillOccupies() {
+    r := MissingFrameRig(), r.Api.OnWindowId := 0, r.Api.Locations[102] := "A"
+    Assert(r.Controller.Move(1) = "moved" && VDOrder(r.Api.Ids) = "A|B|",
+        "Even an app-cloaked frame must retain its successfully identified desktop")
+}
+
+FrameReturnsBeforeRemoval() {
+    r := MissingFrameRig()
+    r.Windows.OnScan := (number) => number = 2 ? r.Windows.Frames[102].CoreWindow := true : 0
+    Assert(r.Controller.Move(1) = "moved-retained" && VDOrder(r.Api.Ids) = "A|B|",
+        "The second scan must detect a frame acquiring real app content")
+}
+
+FrameInspectionFailure() {
+    r := MissingFrameRig(), r.Windows.FrameFailure := true
+    Assert(r.Controller.Move(1) = "moved-retained" && VDOrder(r.Api.Ids) = "A|B|")
+    Assert(InStr(r.Messages[1], "HRESULT 0x8002802B"),
+        "Failed frame inspection must preserve the original ownership diagnostic")
 }

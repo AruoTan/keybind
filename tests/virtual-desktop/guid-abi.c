@@ -31,6 +31,7 @@ static int ManagerWindowId(void *self, void *hwnd, Guid *id) {
         case 103: return (int)0x80004005; /* E_FAIL, output must not be trusted */
         case 104: *id = desktop; return 0; /* recovered DLL query */
         case 105: return 1;             /* S_FALSE is not a confirmed result */
+        case 106: return (int)0x8002802B; /* untracked view; not GUID_NULL */
         default: return (int)0x80070057; /* E_INVALIDARG */
     }
 }

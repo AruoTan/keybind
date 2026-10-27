@@ -21,7 +21,61 @@ class VDWindows {
         className := DllCall("GetClassNameW", "Ptr", token.Hwnd, "Ptr", classBuffer,
             "Int", 256, "Int") ? StrGet(classBuffer, "UTF-16") : "unknown"
         ; Identify a cleanup blocker without logging its title or app contents.
-        return Format("HWND 0x{:X}; PID {}; class {}", token.Hwnd, token.Pid, className)
+        cloak := "unknown"
+        try cloak := Format("0x{:X}", this.Cloak(token.Hwnd))
+        frame := ""
+        try {
+            state := this.FrameState(token)
+            if IsObject(state)
+                frame := Format("; core-window {}; foreground {}", state.CoreWindow, state.Foreground)
+        }
+        return Format("HWND 0x{:X}; PID {}; class {}; cloak {}; minimized {}",
+            token.Hwnd, token.Pid, className, cloak,
+            !!DllCall("IsIconic", "Ptr", token.Hwnd, "Int")) frame
+    }
+
+    Cloak(hwnd) {
+        flags := 0
+        hr := DllCall("dwmapi\DwmGetWindowAttribute", "Ptr", hwnd, "UInt", 14,
+            "UInt*", &flags, "UInt", 4, "Int") ; DWMWA_CLOAKED
+        if hr != 0
+            throw Error("Cannot query window cloak state", , Format("HRESULT 0x{:08X}", hr & 0xFFFFFFFF))
+        return flags
+    }
+
+    FrameState(token) {
+        previous := A_DetectHiddenWindows
+        DetectHiddenWindows true
+        try {
+            criteria := "ahk_id " token.Hwnd
+            if WinGetClass(criteria) != "ApplicationFrameWindow"
+                || StrLower(WinGetProcessName(criteria)) != "applicationframehost.exe"
+                return 0
+            coreWindow := false
+            for child in WinGetControlsHwnd(criteria) {
+                if WinGetClass("ahk_id " child) = "Windows.UI.Core.CoreWindow" {
+                    coreWindow := true
+                    break
+                }
+            }
+            return {Cloak: this.Cloak(token.Hwnd), CoreWindow: coreWindow,
+                Minimized: !!DllCall("IsIconic", "Ptr", token.Hwnd, "Int"),
+                Foreground: DllCall("GetForegroundWindow", "Ptr") = token.Hwnd}
+        }
+        finally DetectHiddenWindows previous
+    }
+
+    UntrackedFrame(token, err) {
+        ; Never interpret a generic query failure or GUID_NULL as an empty
+        ; frame. TYPE_E_ELEMENTNOTFOUND must refer to this exact window.
+        if !(err is VDWindowQueryError) || err.HResult != 0x8002802B
+            || err.Hwnd != token.Hwnd || !this.Valid(token)
+            return false
+        state := this.FrameState(token)
+        ; A parked frame is app-cloaked, not shell-cloaked by another desktop.
+        ; Keep minimized frames, active frames and frames hosting a UWP view.
+        return IsObject(state) && state.Cloak = 1 && !state.CoreWindow
+            && !state.Minimized && !state.Foreground && this.Valid(token)
     }
 
     All() {
