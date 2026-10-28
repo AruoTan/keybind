@@ -9,6 +9,9 @@ try {
     Sleep 1500
     if !ProcessExist(childPid)
         throw Error("Compiled main exited during startup")
+    diagnostic := FileRead(EnvGet("LOCALAPPDATA") "\keybind\virtual-desktop.log", "UTF-8")
+    if !InStr(diagnostic, "Virtual desktop init; diagnostics=cleanup-v2; PID=" childPid ";")
+        throw Error("Compiled main did not log its cleanup diagnostic marker and PID")
     DetectHiddenWindows true
     if !WinExist("Keybind.KeePassImeBridge.v1 ahk_pid " childPid)
         throw Error("Existing KeePass bridge did not initialize")
@@ -28,5 +31,5 @@ if failure != "" {
     FileAppend "FAIL: " failure "`n", logPath, "UTF-8"
     ExitApp 1
 }
-FileAppend "PASS: compiled main starts without its optional DLL; KeePass bridge stays available`n", logPath, "UTF-8"
+FileAppend "PASS: compiled main logs its diagnostic marker/PID and starts without its optional DLL; KeePass bridge stays available`n", logPath, "UTF-8"
 ExitApp 0

@@ -6,6 +6,8 @@
 ; AutoHotkey v2, Windows x64. Including this file alone registers no hotkeys.
 VirtualDesktopInit() {
     global VirtualDesktopState
+    VDLog("Virtual desktop init; diagnostics=cleanup-v2; PID=" DllCall("GetCurrentProcessId", "UInt")
+        "; executable=" A_ScriptFullPath)
     try {
         dll := A_IsCompiled ? A_ScriptDir "\VirtualDesktopAccessor.dll"
             : A_ScriptDir "\..\dist\windows-x64\VirtualDesktopAccessor.dll"
@@ -22,6 +24,7 @@ VirtualDesktopInit() {
         Hotkey "$#+Right", VDKeyDown.Bind(1, "Right"), "On T2 B0"
         Hotkey "$~*Left Up", VDKeyUp.Bind("Left"), "On"
         Hotkey "$~*Right Up", VDKeyUp.Bind("Right"), "On"
+        VDLog("Virtual desktop ready; diagnostics=cleanup-v2")
         return true
     }
     catch as err {
@@ -37,15 +40,19 @@ VirtualDesktopInit() {
 
 VirtualDesktopMove(direction) {
     global VirtualDesktopState
-    if !IsSet(VirtualDesktopState) || !IsObject(VirtualDesktopState)
+    if !IsSet(VirtualDesktopState) || !IsObject(VirtualDesktopState) {
+        VDLog("Operation result; action=move; direction=" direction "; result=disabled")
         return "disabled"
+    }
     return VirtualDesktopState.Controller.Move(direction)
 }
 
 VirtualDesktopSwitch(direction, focus := 0) {
     global VirtualDesktopState
-    if !IsSet(VirtualDesktopState) || !IsObject(VirtualDesktopState)
+    if !IsSet(VirtualDesktopState) || !IsObject(VirtualDesktopState) {
+        VDLog("Operation result; action=switch; direction=" direction "; result=disabled")
         return "disabled"
+    }
     return VirtualDesktopState.Controller.Switch(direction, focus)
 }
 
@@ -82,6 +89,12 @@ VDErrorText(err) {
 }
 
 VDReport(message) {
+    VDLog(message)
+    ToolTip "Keybind: " message
+    SetTimer VDHideTip, -4000
+}
+
+VDLog(message) {
     ; No titles, process command lines, clipboard data or application content.
     OutputDebug "Keybind virtual desktop: " message
     try {
@@ -92,8 +105,6 @@ VDReport(message) {
             FileMove path, path ".old", true
         FileAppend FormatTime(, "yyyy-MM-dd HH:mm:ss") " " message "`n", path, "UTF-8"
     }
-    ToolTip "Keybind: " message
-    SetTimer VDHideTip, -4000
 }
 
 VDHideTip() {

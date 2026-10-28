@@ -1,17 +1,17 @@
 # GitHub Release 与 Scoop
 
-项目版本由根目录 `VERSION` 管理，目前为 `2.2.0`；许可证为 `GPL-3.0-only`。发布工作流位于 `.github/workflows/release.yml`。
+项目版本由根目录 `VERSION` 管理，目前为 `2.2.1`；许可证为 `GPL-3.0-only`。发布工作流位于 `.github/workflows/release.yml`。
 
-## 发布 2.2.0
+## 发布 2.2.1
 
 提交并推送本次改动后，在仓库根目录执行（若尚未配置 `origin`，先运行 `git remote add origin git@github.com:AruoTan/keybind.git`）：
 
 ```bash
-git tag -a v2.2.0 -m "Release 2.2.0"
-git push origin v2.2.0
+git tag -a v2.2.1 -m "Release 2.2.1"
+git push origin v2.2.1
 ```
 
-推送标签会自动运行工作流。也可以在 GitHub Actions 的 **Release → Run workflow** 输入已存在的 `v2.2.0` 标签；标签必须与 `VERSION` 一致。后续版本先修改 `VERSION`，再创建相应的 `vX.Y.Z` 标签。
+推送标签会自动运行工作流。也可以在 GitHub Actions 的 **Release → Run workflow** 输入已存在的 `v2.2.1` 标签；标签必须与 `VERSION` 一致。后续版本先修改 `VERSION`，再创建相应的 `vX.Y.Z` 标签。
 
 工作流根据运行所在仓库生成下载地址，当前目标为 `AruoTan/keybind`。无需个人访问令牌，只有最终发布任务使用具有 `contents: write` 权限的内置 `GITHUB_TOKEN`。不修改仓库分支，不自动提交 Scoop manifest；manifest 在每次发布时根据最终安装 ZIP 的实际 SHA256 生成。
 
@@ -76,7 +76,7 @@ scoop uninstall keybind
 
 ```bash
 python3 -m unittest discover -s tests/release -v
-python3 scripts/release.py validate --tag v2.2.0
+python3 scripts/release.py validate --tag v2.2.1
 ./build.sh
 ```
 
@@ -90,7 +90,7 @@ $keepass = & .\.devcontainer\scripts\setup-keepass.ps1
 把生成的 `dist/keybind-keepass-ime.zip` 和 `build/metadata/keepass-build.json` 分别放回主构建工作区的同名目录，然后在 Linux 执行：
 
 ```bash
-python3 scripts/release.py package --tag v2.2.0 --repository AruoTan/keybind
+python3 scripts/release.py package --tag v2.2.1 --repository AruoTan/keybind
 ```
 
 最终附件位于 `dist/release/`。`release-notes.md` 用作 GitHub Release 正文，不属于下载附件。打包脚本拒绝不匹配的版本、被修改的主程序或 DLL、不一致的便携包及未通过加载检查的插件包。

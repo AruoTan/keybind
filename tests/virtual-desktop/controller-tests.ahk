@@ -24,7 +24,10 @@ try {
         SwitchFocusBeforeCreatedFailure, SwitchFocusAfterCreatedFailure,
         SwitchFocusOrder, SwitchFocusBeforeFailure, SwitchFocusAfterFailure,
         SwitchFocusApiFailure, SwitchFocusBoundary, SwitchFocusOrderChanged, SwitchFocusCloseFailure,
-        SwitchHiddenSourceProtection, SwitchSourceProtectionFailure] {
+        SwitchHiddenSourceProtection, SwitchSourceProtectionFailure,
+        CleanupOccupiedImmediately, CleanupReorderOnFinalScan, CleanupUnknownOnFinalScan,
+        CleanupSwitchOnFinalScan,
+        MoveContinuousCleanup, SwitchContinuousCleanup, MoveOperationLogs, SwitchOperationLogs] {
         test.Call()
         count += 1
     }
@@ -39,6 +42,104 @@ catch as err {
 Assert(condition, message := "Assertion failed") {
     if !condition
         throw Error(message, -1)
+}
+
+FindLog(r, text) {
+    for message in r.Logs {
+        if InStr(message, text)
+            return message
+    }
+    return ""
+}
+
+MoveOperationLogs() {
+    for expected in ["no-window", "pinned", "busy", "moved", "failed", "moved-retained"] {
+        r := Rig()
+        switch expected {
+            case "no-window": r.Windows.Active := false
+            case "pinned": r.Api.Pins[101] := true
+            case "busy": r.Controller.Busy := true
+            case "failed": r.Api.Fail := "Snapshot"
+            case "moved-retained": r.Windows.CanFocus := false
+        }
+        Assert(r.Controller.Move(1) = expected)
+        Assert(FindLog(r, "Operation begin; action=move; direction=1") != ""
+            && FindLog(r, "Operation result; action=move; direction=1; result=" expected ";") != "",
+            "Every dispatched move must log its start and result, including early exits")
+    }
+}
+
+SwitchOperationLogs() {
+    for expected in ["busy", "switched", "failed", "switched-retained"] {
+        r := Rig()
+        switch expected {
+            case "busy": r.Controller.Busy := true
+            case "failed": r.Api.Fail := "Snapshot"
+            case "switched-retained": r.Api.Locations[101] := "?"
+        }
+        Assert(r.Controller.Switch(1) = expected)
+        Assert(FindLog(r, "Operation begin; action=switch; direction=1") != ""
+            && FindLog(r, "Operation result; action=switch; direction=1; result=" expected ";") != "",
+            "Every dispatched switch must log its start and result")
+        if expected = "switched" {
+            route := FindLog(r, "Desktop route; action=switch;")
+            Assert(InStr(route, "source=A; source-index=0; target=B; target-index=1; desktop-count=2;"),
+                "Log the GUID route and indices before switching")
+        }
+    }
+}
+
+CleanupOccupiedImmediately() {
+    r := Rig()
+    Assert(r.Controller.Switch(1) = "switched")
+    Assert(VDOrder(r.Api.Ids) = "A|B|" && r.Windows.ScanCount = 1 && !r.Controller.Busy,
+        "A confirmed source app must be retained after one scan without an occupied-state retry")
+    Assert(InStr(FindLog(r, "Source desktop retained: occupied;"), "HWND 0x65"),
+        "Identify the blocker without logging app contents")
+}
+
+CleanupReorderOnFinalScan() {
+    r := Rig(["A", "B", "C"]), r.Api.Locations.Clear()
+    r.Windows.OnScan := (number) => number = 2 ? r.Api.Reorder("C", 0) : 0
+    Assert(r.Controller.Switch(1) = "switched-retained")
+    Assert(VDOrder(r.Api.Ids) = "C|A|B|" && r.Messages.Length = 1,
+        "An external reorder on the final scan must stop before deletion")
+}
+
+CleanupUnknownOnFinalScan() {
+    r := Rig(), r.Api.Locations.Clear()
+    r.Windows.OnScan := (number) => number = 2 ? r.Api.Locations[102] := "?" : 0
+    Assert(r.Controller.Switch(1) = "switched-retained")
+    Assert(VDOrder(r.Api.Ids) = "A|B|" && r.Windows.ScanCount = 2,
+        "An unknown live window on the final scan must retain the source")
+}
+
+CleanupSwitchOnFinalScan() {
+    r := Rig(["A", "B", "C"]), r.Api.Locations.Clear()
+    r.Windows.OnScan := (number) => number = 2 ? r.Api.Desktop := "C" : 0
+    Assert(r.Controller.Switch(1) = "switched")
+    Assert(VDOrder(r.Api.Ids) = "A|B|C|" && r.Windows.ScanCount = 2,
+        "Recheck the current desktop after the final occupancy scan and before deletion")
+    Assert(FindLog(r, "Source desktop retained: current desktop changed before removal;") != "",
+        "A changed fallback must have an explicit cleanup result")
+}
+
+MoveContinuousCleanup() {
+    r := Rig(["A", "B", "C"])
+    Assert(r.Controller.Move(1) = "moved" && VDOrder(r.Api.Ids) = "B|C|")
+    Assert(r.Api.Desktop = "B" && r.Api.Index("B") = 0)
+    Assert(r.Controller.Move(1) = "moved" && VDOrder(r.Api.Ids) = "C|")
+    Assert(r.Api.Desktop = "C" && r.Api.Index("C") = 0,
+        "Each move must remove its own source and resolve the next neighbor using the new order")
+}
+
+SwitchContinuousCleanup() {
+    r := Rig(["A", "B", "C"]), r.Api.Locations.Clear()
+    Assert(r.Controller.Switch(1) = "switched" && VDOrder(r.Api.Ids) = "B|C|")
+    Assert(r.Api.Desktop = "B" && r.Api.Index("B") = 0)
+    Assert(r.Controller.Switch(1) = "switched" && VDOrder(r.Api.Ids) = "C|")
+    Assert(r.Api.Desktop = "C" && r.Api.Index("C") = 0,
+        "Desktop-only navigation must complete each deletion before processing the next switch")
 }
 
 SwitchExisting() {
@@ -370,9 +471,10 @@ RaiseCaptureError() {
 Rig(ids := 0, current := "A") {
     api := FakeApi(IsObject(ids) ? ids : ["A", "B"], current)
     windows := FakeWindows(api)
-    messages := []
-    controller := VDController(api, windows, 0, 0, (message) => messages.Push(message))
-    return {Api: api, Windows: windows, Controller: controller, Messages: messages}
+    messages := [], logs := []
+    controller := VDController(api, windows, 0, 0, (message) => messages.Push(message),
+        (message) => logs.Push(message))
+    return {Api: api, Windows: windows, Controller: controller, Messages: messages, Logs: logs}
 }
 
 class FakeApi {

@@ -7,36 +7,38 @@ VDOrder(ids) {
 }
 
 class VDController {
-    __New(api, windows, timeout := 1500, settle := 100, report := VDReport) {
+    __New(api, windows, timeout := 1500, settle := 100, report := VDReport, log := VDLog) {
         this.Api := api
         this.Windows := windows
         this.Timeout := timeout
         this.Settle := settle
         this.Report := report
+        this.Log := log
         this.Busy := false
     }
 
     Move(direction) {
         if direction != -1 && direction != 1
             throw ValueError("Direction must be -1 or 1")
+        this.Log.Call("Operation begin; action=move; direction=" direction)
         if this.Busy
-            return "busy"
+            return this.Result("move", direction, "busy")
         this.Busy := true
         source := "", target := "", created := "", group := 0
         moveAttempted := false, switched := false
         try {
             group := this.Windows.Capture()
             if !IsObject(group)
-                return "no-window"
+                return this.Result("move", direction, "no-window")
             api := this.Api
             order := api.Snapshot()
             source := api.Current()
             sourceIndex := this.Find(order, source)
             for token in group.Members {
                 if !this.Windows.Valid(token)
-                    return "no-window"
+                    return this.Result("move", direction, "no-window", source)
                 if api.Pinned(token.Hwnd)
-                    return "pinned"
+                    return this.Result("move", direction, "pinned", source)
                 if api.WindowId(token.Hwnd) != source
                     throw Error("Active window group is not on the current desktop")
             }
@@ -59,6 +61,7 @@ class VDController {
             this.CheckOrder(order)
             if api.Current() != source || !this.Windows.StillActive(group)
                 throw Error("Foreground window or current desktop changed")
+            this.Route("move", source, target, order, created)
             for token in group.Members {
                 this.CheckOrder(order)
                 if !this.Windows.Valid(token) || api.Pinned(token.Hwnd)
@@ -83,7 +86,7 @@ class VDController {
             if !this.Windows.Focus(group)
                 throw Error("Window moved, but focus could not be restored; source retained")
             this.RemoveIfEmpty(source, target, order)
-            return "moved"
+            return this.Result("move", direction, "moved", source, target)
         }
         catch as err {
             if moveAttempted && !switched
@@ -91,7 +94,7 @@ class VDController {
             if created != "" && !switched
                 this.ReclaimCreated(created, source)
             this.Report.Call(VDErrorText(err))
-            return switched ? "moved-retained" : "failed"
+            return this.Result("move", direction, switched ? "moved-retained" : "failed", source, target)
         }
         finally {
             this.Busy := false
@@ -103,8 +106,9 @@ class VDController {
     Switch(direction, focus := 0) {
         if direction != -1 && direction != 1
             throw ValueError("Direction must be -1 or 1")
+        this.Log.Call("Operation begin; action=switch; direction=" direction)
         if this.Busy
-            return "busy"
+            return this.Result("switch", direction, "busy")
         this.Busy := true
         source := "", target := "", created := ""
         switched := false, focused := false
@@ -129,6 +133,7 @@ class VDController {
             this.CheckOrder(order)
             if this.Api.Current() != source
                 throw Error("Current desktop changed before switch")
+            this.Route("switch", source, target, order, created)
             if IsObject(focus) {
                 focus.Before(this.Api, source, target)
                 this.CheckOrder(order)
@@ -146,13 +151,17 @@ class VDController {
             if !IsObject(focus) || !HasMethod(focus, "SourceOccupied")
                 || !focus.SourceOccupied(this.Api, source)
                 this.RemoveIfEmpty(source, target, order)
-            return "switched"
+            else
+                this.Log.Call("Source desktop retained: source application still assigned; source=" source
+                    "; target=" target)
+            return this.Result("switch", direction, "switched", source, target)
         }
         catch as err {
             if created != "" && !switched
                 this.ReclaimCreated(created, source)
             this.Report.Call(VDErrorText(err))
-            return switched ? (focused ? "switched-retained" : "switched-unfocused") : "failed"
+            return this.Result("switch", direction,
+                switched ? (focused ? "switched-retained" : "switched-unfocused") : "failed", source, target)
         }
         finally {
             if IsObject(focus) {
@@ -162,6 +171,19 @@ class VDController {
             }
             this.Busy := false
         }
+    }
+
+    Result(action, direction, result, source := "", target := "") {
+        this.Log.Call("Operation result; action=" action "; direction=" direction "; result=" result
+            "; source=" source "; target=" target)
+        return result
+    }
+
+    Route(action, source, target, order, created) {
+        this.Log.Call("Desktop route; action=" action "; source=" source
+            "; source-index=" this.Find(order, source) "; target=" target
+            "; target-index=" this.Find(order, target) "; desktop-count=" order.Length
+            "; created=" created)
     }
 
     Find(order, id) {
@@ -200,6 +222,7 @@ class VDController {
     }
 
     Empty(desktop) {
+        this.LastOccupant := 0
         for token in this.Windows.Applications() {
             if !this.Windows.Valid(token)
                 continue
@@ -211,8 +234,10 @@ class VDController {
                     continue
                 if location = "" || this.Api.Pinned(token.Hwnd)
                     continue
-                if location = desktop
+                if location = desktop {
+                    this.LastOccupant := token
                     return false
+                }
             }
             catch as err {
                 ; Windows can disappear during a shell query. Live windows with
@@ -235,21 +260,40 @@ class VDController {
 
     RemoveIfEmpty(source, fallback, order) {
         this.CheckOrder(order)
-        if source = fallback || order.Length <= 1 || this.Api.Current() != fallback
-            return false
-        if !this.Empty(source)
-            return false
+        if source = fallback || order.Length <= 1
+            return this.RetainSource(source, fallback, "last desktop or identical fallback")
+        if this.Api.Current() != fallback
+            return this.RetainSource(source, fallback, "current desktop changed before scan")
+        if !this.Empty(source) {
+            blocker := "unknown"
+            try blocker := this.Windows.Describe(this.LastOccupant)
+            return this.RetainSource(source, fallback, "occupied; " blocker)
+        }
         if this.Settle
             Sleep this.Settle
         this.CheckOrder(order)
-        if this.Api.Current() != fallback || !this.Empty(source)
-            return false
+        if this.Api.Current() != fallback
+            return this.RetainSource(source, fallback, "current desktop changed before final scan")
+        if !this.Empty(source) {
+            blocker := "unknown"
+            try blocker := this.Windows.Describe(this.LastOccupant)
+            return this.RetainSource(source, fallback, "occupied on final scan; " blocker)
+        }
         this.CheckOrder(order)
+        if this.Api.Current() != fallback
+            return this.RetainSource(source, fallback, "current desktop changed before removal")
         this.Api.Remove(source, fallback)
         expected := order.Clone()
         expected.RemoveAt(this.Find(expected, source) + 1)
         this.Await(() => VDOrder(this.Api.Snapshot()) = VDOrder(expected))
+        this.Log.Call("Source desktop removed; source=" source "; target=" fallback
+            "; target-index=" this.Find(expected, fallback) "; desktop-count=" expected.Length)
         return true
+    }
+
+    RetainSource(source, fallback, reason) {
+        this.Log.Call("Source desktop retained: " reason "; source=" source "; target=" fallback)
+        return false
     }
 
     Rollback(group, source, target) {
