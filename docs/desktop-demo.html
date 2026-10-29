@@ -1,0 +1,185 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="color-scheme" content="light dark">
+<title>Keybind · 虚拟桌面交互演示</title>
+<style>
+:root{font-family:"Segoe UI","Microsoft YaHei",sans-serif;color:#182435;background:#f4f6fa;--panel:#fff;--line:#dbe2ed;--muted:#5a687b;--accent:#2458c9;--soft:#edf3ff;--window:#f8faff;--shadow:0 12px 38px #203b6810}
+*{box-sizing:border-box}body{margin:0}main{max-width:1080px;margin:auto;padding:44px 24px 32px}a{color:var(--accent);text-underline-offset:4px}.brand{font-size:12px;font-weight:700;letter-spacing:.16em;color:var(--accent)}h1{font-size:clamp(26px,4vw,38px);letter-spacing:-.04em;margin:12px 0}h2{font-size:17px;margin:0 0 14px}p{line-height:1.75;margin:0;color:var(--muted)}header{margin-bottom:26px}.panel{background:var(--panel);border:1px solid var(--line);border-radius:18px;box-shadow:var(--shadow)}.toolbar{padding:20px;display:flex;flex-wrap:wrap;align-items:end;gap:16px}.field{display:grid;gap:8px}.field>span{font-size:13px;color:var(--muted)}button,select{font:inherit}select{max-width:100%;padding:10px 34px 10px 12px;border:1px solid var(--line);border-radius:9px;background:var(--panel);color:inherit;min-height:43px}.modes{display:flex;border:1px solid var(--line);border-radius:9px;padding:3px;gap:3px}.modes button{border:0;padding:9px 13px;background:transparent;color:var(--muted);border-radius:6px}.modes button[aria-pressed=true]{color:var(--accent);background:var(--soft);font-weight:600}button{cursor:pointer}.reset{margin-left:auto;border:1px solid var(--line);border-radius:9px;padding:11px 16px;background:var(--panel);color:inherit}.nav{display:flex;justify-content:center;gap:12px;margin:22px 0}.nav button{background:var(--accent);color:#fff;border:0;padding:13px 22px;border-radius:10px;font-weight:600;box-shadow:0 4px 12px #2458c921}.nav kbd{font:inherit;font-size:12px;opacity:.85;margin-left:9px}button:hover{filter:brightness(.96)}button:focus-visible,select:focus-visible,a:focus-visible{outline:3px solid #7299ed;outline-offset:3px}.stage{padding:20px;min-height:270px}.stage-head{display:flex;justify-content:space-between;gap:16px;align-items:center;margin-bottom:18px}.stage-head h2{margin:0}.position{font-size:13px;color:var(--muted)}.desktops{display:flex;gap:14px;overflow-x:auto;padding:4px 3px 15px;scroll-snap-type:x proximity}.desktop{flex:1 0 210px;min-width:0;border:1px solid var(--line);border-radius:12px;padding:13px;background:var(--window);scroll-snap-align:center}.desktop.current{border:2px solid var(--accent);padding:12px;background:var(--soft)}.desktop-header{display:flex;justify-content:space-between;align-items:center;gap:12px;margin-bottom:14px}.desktop-header strong{font-size:14px}.badge{font-size:11px;color:var(--accent);background:var(--panel);padding:4px 7px;border-radius:6px}.apps{display:grid;gap:8px;min-height:90px;align-content:start}.app{display:flex;align-items:center;gap:8px;width:100%;padding:11px 9px;border:1px solid var(--line);border-radius:8px;background:var(--panel);color:inherit;text-align:left;font-size:13px}.app.active{border-color:var(--accent)}.app:disabled{cursor:default;opacity:.8}.dot{width:8px;height:8px;border-radius:3px;flex-shrink:0;background:#6e8cc5}.app.active .dot{background:var(--accent)}.app small{margin-left:auto;color:var(--muted);font-size:11px}.empty{font-size:13px;text-align:center;padding:24px 0;color:var(--muted)}.summary{font-size:12px;margin-top:12px;color:var(--muted)}.notice{min-height:54px;display:flex;justify-content:center;align-items:center;margin:0 0 12px}.toast{padding:12px 32px;border:1px solid var(--line);border-radius:9px;box-shadow:0 8px 20px #142c5322;background:var(--panel);font-size:14px}.details{margin-top:20px;padding:22px;display:grid;grid-template-columns:1.2fr 1fr;gap:30px}.steps{margin:0;padding-left:23px;color:var(--muted);font-size:14px;line-height:1.8}.steps li+li{margin-top:5px}.rule{font-size:14px;line-height:1.85}.rule+.rule{margin-top:12px}footer{display:flex;justify-content:space-between;flex-wrap:wrap;gap:14px;font-size:12px;color:var(--muted);margin-top:24px;line-height:1.7}noscript p{padding:20px;border:1px solid var(--line);border-radius:12px} @media(max-width:640px){main{padding:25px 16px}.toolbar{gap:14px;padding:16px}.field{width:100%}.modes button{flex:1}.reset{margin-left:0}.nav button{flex:1;padding:13px 10px}.nav kbd{display:block;margin:6px 0 0}.details{grid-template-columns:1fr;gap:22px}.stage{padding:16px}.desktop{flex-basis:195px}}
+@media(prefers-color-scheme:dark){:root{background:#101722;color:#e3eaf5;--panel:#192230;--line:#334259;--muted:#aab8ce;--accent:#94b6ff;--soft:#263854;--window:#1d293b;--shadow:0 12px 38px #0002}.nav button{background:#3868d7;color:#fff}.toast{box-shadow:0 8px 20px #0006}}
+</style>
+</head>
+<body>
+<main>
+<header>
+<a class="brand" href="https://github.com/AruoTan/keybind">KEYBIND</a>
+<h1>虚拟桌面切换演示</h1>
+<p>选择场景，比较两种桌面快捷键。</p>
+</header>
+<noscript><p>启用 JavaScript 后可操作演示。规则说明见<a href="https://github.com/AruoTan/keybind/blob/master/docs/usage.md#虚拟桌面规则">使用指南</a>。</p></noscript>
+<section class="panel toolbar" aria-label="演示设置">
+<label class="field"><span>场景</span><select id="scenario">
+<option value="move">带走唯一窗口</option>
+<option value="left">向左边界创建</option>
+<option value="minimized">源桌面有最小化窗口</option>
+<option value="pinned">固定在所有桌面的窗口</option>
+<option value="unknown">窗口归属查询失败</option>
+<option value="empty">没有活动应用窗口</option>
+</select></label>
+<div class="field"><span>操作方式</span><div class="modes" role="group" aria-label="操作方式">
+<button id="switch-mode" type="button" aria-pressed="false">只切换 · Ctrl</button>
+<button id="move-mode" type="button" aria-pressed="true">携带窗口 · Shift</button>
+</div></div>
+<button class="reset" type="button" id="reset">重置场景</button>
+</section>
+<nav class="nav" aria-label="模拟桌面快捷键">
+<button type="button" id="left">← 向左<kbd id="left-key">Win + Shift + ←</kbd></button>
+<button type="button" id="right">向右 →<kbd id="right-key">Win + Shift + →</kbd></button>
+</nav>
+<section class="panel stage" aria-label="虚拟桌面状态">
+<div class="stage-head"><h2>桌面预览</h2><span class="position" id="position"></span></div>
+<div class="desktops" id="desktops"></div>
+<p class="summary">点击当前桌面内的普通窗口，可将它设为活动窗口。</p>
+</section>
+<div class="notice" role="status" aria-live="polite"><span id="toast" class="toast">桌面 1</span></div>
+<section class="panel details">
+<div><h2>本次操作</h2><ol class="steps" id="steps" aria-live="polite"></ol></div>
+<div><h2>清理规则</h2><p class="rule">只检查刚离开的桌面。普通窗口和最小化窗口会阻止删除；固定窗口不计入独占占用；归属未知时保留。</p><p class="rule">清理完成后重新编号。始终至少保留一个桌面。</p></div>
+</section>
+<footer><span>这是规则模拟，不执行 Windows 桌面操作。</span><span><a href="https://github.com/AruoTan/keybind/blob/master/docs/usage.md">使用指南</a> · <a href="https://github.com/AruoTan/keybind/blob/master/docs/development.md">开发指南</a></span></footer>
+</main>
+<script>
+"use strict";
+const scenarios = {
+  move: {mode:"move", apps:[[{id:"note",name:"记事本"}],[{id:"code",name:"编辑器"}]], active:"note",
+    intro:"记事本是源桌面的唯一窗口。向右携带它，观察源桌面清理后的最终编号。"},
+  left: {mode:"switch", apps:[[{id:"note",name:"记事本"}],[{id:"code",name:"编辑器"}]], active:"note",
+    intro:"当前位于最左侧。向左操作将创建桌面，并把新桌面排到最左侧。"},
+  minimized: {mode:"move", apps:[[{id:"note",name:"记事本"},{id:"browser",name:"浏览器",minimized:true}],[]], active:"note",
+    intro:"携带记事本离开后，源桌面的最小化浏览器仍会阻止删除。"},
+  pinned: {mode:"switch", apps:[[],[{id:"code",name:"编辑器"}]], active:"pin", pinned:[{id:"pin",name:"固定窗口",pinned:true}],
+    intro:"只切换时，固定窗口不阻止空源桌面删除；切换到携带窗口模式时，活动的固定窗口不会被移动。"},
+  unknown: {mode:"move", apps:[[{id:"note",name:"记事本"},{id:"unknown",name:"归属未知的窗口",unknown:true}],[]], active:"note",
+    intro:"携带记事本离开后，另一个窗口的桌面归属无法确认，源桌面会被保留。"},
+  empty: {mode:"switch", apps:[[],[{id:"code",name:"编辑器"}]], active:null,
+    intro:"当前没有活动应用。只切换仍可操作，携带窗口模式不会创建或切换桌面。"}
+};
+let state;
+let sequence = 0;
+const byId = id => document.getElementById(id);
+function makeDesktop(apps) { return {id:++sequence, apps:apps.map(app => ({...app}))}; }
+function loadScenario() {
+  const scenario = scenarios[byId("scenario").value];
+  state = {desktops:scenario.apps.map(makeDesktop), current:null, active:scenario.active,
+    pinned:(scenario.pinned || []).map(app => ({...app})), mode:scenario.mode};
+  state.current = state.desktops[0].id;
+  render([scenario.intro]);
+}
+function setMode(mode) { state.mode = mode; render([mode === "move" ? "携带活动窗口前往相邻桌面，再清理空源桌面。" : "窗口留在原处，切换后清理空源桌面。"]); }
+function currentDesktop() { return state.desktops.find(desktop => desktop.id === state.current); }
+function currentApp() { return [...currentDesktop().apps, ...state.pinned].find(app => app.id === state.active); }
+function navigate(direction) {
+  const steps = [];
+  const source = currentDesktop();
+  const sourceIndex = state.desktops.indexOf(source);
+  const sourceLabel = "原桌面 " + (sourceIndex + 1);
+  const active = currentApp();
+  if (state.mode === "move" && (!active || active.minimized || active.unknown)) {
+    render(["没有可移动的活动应用窗口，本次不创建、不切换桌面。"]); return;
+  }
+  if (state.mode === "move" && active.pinned) {
+    render(["活动窗口固定在所有桌面，本次不移动、不切换，保留固定状态。"]); return;
+  }
+  const targetIndex = sourceIndex + direction;
+  let target;
+  if (targetIndex < 0 || targetIndex >= state.desktops.length) {
+    target = makeDesktop([]);
+    if (direction < 0) {
+      state.desktops.unshift(target);
+      steps.push("左侧没有桌面：创建新桌面，并将它重排到最左侧。");
+    } else {
+      state.desktops.push(target);
+      steps.push("右侧没有桌面：在末尾创建新桌面。");
+    }
+  } else {
+    target = state.desktops[targetIndex];
+    steps.push("使用相邻的桌面 " + (targetIndex + 1) + "。");
+  }
+  if (state.mode === "move") {
+    source.apps = source.apps.filter(app => app.id !== active.id);
+    target.apps.push(active);
+    steps.push("移动“" + active.name + "”并确认目标归属，其他窗口保持原位。");
+  } else {
+    state.active = target.apps.find(app => !app.minimized && !app.unknown)?.id || state.pinned[0]?.id || null;
+    steps.push("窗口留在原处。");
+  }
+  state.current = target.id;
+  steps.push("确认切换并恢复目标焦点。");
+  if (source.apps.some(app => app.unknown)) {
+    steps.push(sourceLabel + "有归属未知的窗口，保留源桌面。");
+  } else if (source.apps.length) {
+    steps.push(sourceLabel + (source.apps.some(app => app.minimized) ? "仍有最小化或普通应用窗口，保留源桌面。" : "仍有应用窗口，保留源桌面。"));
+  } else {
+    state.desktops = state.desktops.filter(desktop => desktop.id !== source.id);
+    steps.push("两次确认" + sourceLabel + "为空，删除它。");
+  }
+  const finalNumber = state.desktops.findIndex(desktop => desktop.id === target.id) + 1;
+  steps.push("最终位于桌面 " + finalNumber + "，共 " + state.desktops.length + " 个桌面。");
+  render(steps);
+}
+function appElement(app, current) {
+  const button = document.createElement("button");
+  button.type = "button";
+  button.className = "app" + (current && state.active === app.id ? " active" : "");
+  button.disabled = !current || !!app.minimized || !!app.unknown;
+  button.setAttribute("aria-pressed", String(current && state.active === app.id));
+  const dot = document.createElement("span"); dot.className = "dot"; dot.setAttribute("aria-hidden","true");
+  const name = document.createElement("span"); name.textContent = app.name;
+  const status = document.createElement("small");
+  status.textContent = app.pinned ? "所有桌面" : app.minimized ? "最小化" : app.unknown ? "未知" : current && state.active === app.id ? "活动" : "";
+  button.append(dot, name, status);
+  button.addEventListener("click", () => {
+    state.active = app.id;
+    render(["已选择“" + app.name + "”作为活动窗口。"]);
+  });
+  return button;
+}
+function render(steps) {
+  const moving = state.mode === "move";
+  byId("move-mode").setAttribute("aria-pressed", String(moving));
+  byId("switch-mode").setAttribute("aria-pressed", String(!moving));
+  byId("left-key").textContent = "Win + " + (moving ? "Shift" : "Ctrl") + " + ←";
+  byId("right-key").textContent = "Win + " + (moving ? "Shift" : "Ctrl") + " + →";
+  byId("desktops").replaceChildren();
+  state.desktops.forEach((desktop, index) => {
+    const current = desktop.id === state.current;
+    const card = document.createElement("section"); card.className = "desktop" + (current ? " current" : "");
+    card.setAttribute("aria-label", "桌面 " + (index + 1) + (current ? "，当前桌面" : ""));
+    const header = document.createElement("div"); header.className = "desktop-header";
+    const title = document.createElement("strong"); title.textContent = "桌面 " + (index + 1); header.append(title);
+    if (current) { const badge = document.createElement("span"); badge.className="badge"; badge.textContent="当前"; header.append(badge); }
+    const apps = document.createElement("div"); apps.className = "apps";
+    const windows = [...desktop.apps, ...state.pinned];
+    if (!windows.length) { const empty = document.createElement("div"); empty.className="empty"; empty.textContent="没有应用窗口"; apps.append(empty); }
+    windows.forEach(app => apps.append(appElement(app, current)));
+    const summary = document.createElement("div"); summary.className="summary";
+    summary.textContent = desktop.apps.length + " 个独占窗口" + (state.pinned.length ? " · " + state.pinned.length + " 个固定窗口" : "");
+    card.append(header, apps, summary); byId("desktops").append(card);
+  });
+  const number = state.desktops.findIndex(desktop => desktop.id === state.current) + 1;
+  byId("position").textContent = "当前位置 " + number + " / " + state.desktops.length;
+  byId("toast").textContent = "桌面 " + number;
+  byId("steps").replaceChildren(...steps.map(text => { const item = document.createElement("li"); item.textContent = text; return item; }));
+}
+byId("scenario").addEventListener("change", loadScenario);
+byId("reset").addEventListener("click", loadScenario);
+byId("move-mode").addEventListener("click", () => setMode("move"));
+byId("switch-mode").addEventListener("click", () => setMode("switch"));
+byId("left").addEventListener("click", () => navigate(-1));
+byId("right").addEventListener("click", () => navigate(1));
+loadScenario();
+</script>
+</body>
+</html>

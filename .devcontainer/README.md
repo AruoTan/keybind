@@ -1,58 +1,50 @@
-# Linux 构建环境
+# 开发环境
 
-在 VS Code 执行 **Dev Containers: Rebuild Container** 即可。配置沿用原来的 `aruowis-dev-base:latest`，现在通过本目录 Dockerfile 补充构建依赖，保留现有 AutoHotkey 扩展。目标环境为 Linux x86_64；当前基础镜像为 Ubuntu 26.04，Wine 10 的 WoW64 支持用于运行官方 32 位 Ahk2Exe。
+本目录管理全部环境配置、安装脚本和固定工具版本。日常构建入口见 [开发指南](../docs/development.md)。
 
-镜像安装 Linux 本机编译工具 `build-essential`（含 `cc`、链接器与系统头文件）、MinGW x64 GCC/Windows 头文件、Wine、Xvfb、Xauth、字体、Python、jq 和 ZIP 工具，并以 `vscode` 用户安装固定版本的 Rust、Windows GNU 标准库、AutoHotkey 和 Ahk2Exe。没有 Windows SDK 或 Visual Studio 依赖。
+## 创建容器
+
+在 VS Code 执行 **Dev Containers: Rebuild Container**。Dockerfile 默认基于本地 `aruowis-dev-base:latest`，要求基础镜像提供 `vscode` 用户；镜像构建时自动安装系统依赖与固定工具，创建后自动执行 `setup-tools.sh --check`。开发者进入容器后可直接运行 `./build.sh`。
+
+目标环境为 Linux x86_64，当前基础环境使用 Ubuntu 26.04。首次镜像构建需联网下载工具，首次 Cargo 构建还需下载依赖。GitHub Actions 使用独立的 `ubuntu:26.04`，复用安装脚本，不依赖本地基础镜像。
+
+## 配置边界
+
+| 文件 | 职责 |
+| --- | --- |
+| `devcontainer.json` | Dockerfile 入口、工作用户、创建后检查与 AHK 扩展 |
+| `Dockerfile` | 以 root 安装系统依赖，以 vscode 安装用户工具 |
+| `.dockerignore` | 限定镜像构建上下文 |
+| `toolchain.json` | Rust、AutoHotkey、Ahk2Exe、上游源码和 KeePass 的版本、地址与 SHA256 |
+| `scripts/install-system.sh` | 安装本机编译器、MinGW、Wine、Xvfb、字体和 Python 等系统依赖 |
+| `scripts/setup-tools.sh` | 安装固定工具，`--check` 只检查，不下载 |
+| `scripts/setup-keepass.ps1` | Windows CI 下载并校验 KeePass 构建参考 |
+| `scripts/download-verified.ps1` | Windows 下载校验与镜像回退 |
+
+环境安装使用 Bash，Windows KeePass 参考下载使用 PowerShell。Python 负责项目构建与打包。Linux 本机 `cc` 用于 Rust 构建脚本和过程宏，MinGW 用于 Windows 目标链接，Wine/WoW64 用于运行 Ahk2Exe。
+
+## 检查与更新
 
 ```bash
-# 创建容器后自动执行；也可手动检查
 bash .devcontainer/scripts/setup-tools.sh --check
-
-# 构建 DLL、EXE、便携 ZIP，并执行控制器、GUID ABI 和实际窗口捕获测试
-./build.sh
-
-# 只运行容器测试
-./build.sh --test-only
 ```
 
-环境配置及安装脚本均在 `.devcontainer/`，Docker 构建上下文也限定为本目录：
-
-```text
-.devcontainer/
-  devcontainer.json          使用 Dockerfile，创建后检查环境
-  Dockerfile                 调用系统安装与用户工具安装脚本
-  .dockerignore              仅向镜像发送配置和安装脚本
-  toolchain.json             工具版本、下载地址和 SHA256
-  scripts/
-    install-system.sh        root 安装 apt 系统依赖
-    setup-tools.sh           普通用户安装工具；--check 只检查
-  README.md
-```
-
-脚本使用 Bash；`setup-tools.sh` 通过 jq 读取版本锁定文件，不调用 Python 安装脚本。Python 用于项目构建和打包。脚本根据自身位置读取配置，可以从任意目录以绝对路径调用。`--check` 不安装或下载工具。
-
-版本、下载地址和 SHA256 固定在 `toolchain.json`。变更工具版本后执行 `bash .devcontainer/scripts/setup-tools.sh`，或重建容器。首次镜像构建需要联网下载固定工具；首次 DLL 构建还需下载 Cargo.lock 指定的 crate。
-
-Cargo 构建优先使用显式 `CARGO_HTTP_PROXY`，否则使用容器代理环境变量或直连，不继承宿主 Git 中可能指向 Windows localhost 的代理。构建不会修改 Git 配置。
-
-如果尚未重建当前容器，可先安装 Dockerfile 中的系统依赖，再运行用户工具安装脚本：
+修改 `toolchain.json` 后重建容器。仅更新用户工具时可运行 `bash .devcontainer/scripts/setup-tools.sh`；尚未重建旧容器时，先补齐系统依赖：
 
 ```bash
 sudo bash .devcontainer/scripts/install-system.sh
 bash .devcontainer/scripts/setup-tools.sh
 ```
 
-缓存位置：
+## 缓存与代理
 
-- `~/.cargo`、`~/.rustup`：固定 Rust 工具链、Windows 目标和 crate 下载缓存。
-- `~/.local/share/keybind-tools`：校验过的工具下载和便携可执行文件，可用 `KEYBIND_TOOLS_DIR` 指定其他目录。
-- `~/.cache/keybind/wine`：每个工作区独立的 Wine 前缀，位于容器本地磁盘，避免 Windows bind mount 上大量小文件带来的启动延迟。
-- `build/cache`：上游源码 ZIP 和 Cargo 交叉编译缓存。
+| 路径 | 内容 |
+| --- | --- |
+| `~/.cargo`、`~/.rustup` | Rust 工具链、目标与 crate 缓存 |
+| `~/.local/share/keybind-tools` | 校验过的下载与便携工具，可用 `KEYBIND_TOOLS_DIR` 覆盖 |
+| `~/.cache/keybind/wine` | 按工作区隔离的 Wine 前缀 |
+| `build/cache` | 上游源码与交叉编译缓存 |
 
-构建使用独立 Xvfb 显示和 Wine 前缀，结束时只停止该前缀的 wineserver；同一工作区的并发构建通过文件锁拒绝。构建日志在 `build/logs/`，测试结果在 `build/tests/`，最终产物在 `dist/`。宿主 Windows 无需安装开发工具，部署及实机验证见 [功能说明](../docs/virtual-desktop.md)。
+Wine 前缀位于容器本地磁盘，构建结束只停止本工作区的 wineserver。同一工作区通过文件锁拒绝并发构建。
 
-AHK 的 `#Include` 统一使用 `%A_LineFile%/../` 定位当前文件所在目录，并使用 `/` 分隔路径，兼容 Linux 容器中的 AHK++ 路径解析和 Windows AutoHotkey。新增包含文件时沿用此约定，避免编辑器将 `%A_ScriptDir%` 解析为工作区根目录。
-
-GitHub Release 的 Linux 任务复用本目录 Bash 安装脚本和 `toolchain.json`，采用公开的 `ubuntu:26.04`，不依赖本地 `aruowis-dev-base:latest` 镜像。可选 KeePass 插件使用独立 Windows 任务，运行 `.devcontainer/scripts/setup-keepass.ps1` 下载并校验固定的 KeePass 构建参考；普通 Linux 开发不需要执行该脚本。发布流程见 [发布说明](../docs/releasing.md)。
-
-Rust 交叉编译仍需要 Linux 本机 `cc`，用于构建脚本和过程宏；`setup-tools.sh --check` 会先检查它。KeePass 下载按锁定地址与直连镜像依次尝试，只有 SHA256 匹配才缓存和解压；失败日志记录地址、实际哈希、字节数与识别出的文件格式。
+Cargo 优先使用 `CARGO_HTTP_PROXY`，否则采用容器代理变量或直连，不继承宿主 Git 中可能指向 Windows localhost 的代理，也不修改 Git 配置。下载失败时检查 URL、实际 SHA256、字节数与文件格式；更换镜像不能跳过哈希校验。
