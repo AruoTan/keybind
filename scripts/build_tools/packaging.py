@@ -26,6 +26,7 @@ def package(lock, stage, locations, dll_details):
         "rdpFocusHandoffTests": True, "windowsRdpKeyboardAfterSwitchTest": False,
         "continuousDesktopNavigationTests": True, "rememberedDesktopFocusTests": True,
         "dynamicDesktopSwitchTests": True,
+        "desktopIndicatorTests": True, "windowsDesktopIndicatorTest": False,
         "windowCaptureTests": True, "dwmCloakTests": False,
         "windowsWindowTests": False, "nativeQueriesChecked": False, "nativeDesktopOperationsChecked": False,
         "dll": dll_details,
@@ -52,6 +53,8 @@ def package(lock, stage, locations, dll_details):
         "Win+Shift+Left/Right moves the active window and follows its desktop.\n"
         "Win+Ctrl+Left/Right switches desktops without moving windows, even from an empty desktop.\n"
         "Both shortcuts create a missing neighbor (left at the beginning) and collect an empty source.\n"
+        "After cleanup, a click-through card shows the final desktop number for one second.\n"
+        "The card does not suppress the native Windows desktop-switch popup.\n"
         "Minimized/hidden source apps are retained; pinned apps stay pinned. Unknown ownership retains the source.\n"
         "In Windows App (msrdc) or mstsc, Win+Ctrl+Left/Right switches LOCAL desktops.\n"
         "Win+Shift+Left/Right moves the LOCAL client window, not a remote app.\n"

@@ -9,7 +9,7 @@ on:
       tag:
         description: Existing release tag matching VERSION
         required: true
-        default: v2.2.1
+        default: v2.3.0
         type: string
 
 permissions:

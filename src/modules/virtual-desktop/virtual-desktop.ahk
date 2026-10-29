@@ -2,6 +2,7 @@
 #Include %A_LineFile%/../controller.ahk
 #Include %A_LineFile%/../native.ahk
 #Include %A_LineFile%/../windows.ahk
+#Include %A_LineFile%/../indicator.ahk
 
 ; AutoHotkey v2, Windows x64. Including this file alone registers no hotkeys.
 VirtualDesktopInit() {
@@ -15,8 +16,15 @@ VirtualDesktopInit() {
         api.Snapshot() ; Includes GUID ABI and index round-trip checks.
         api.Current()
         VirtualDesktopState := {
-            Controller: VDController(api, VDWindows()), Held: Map("Left", false, "Right", false)
+            Controller: VDController(api, VDWindows()), Held: Map("Left", false, "Right", false),
+            Indicator: VDIndicator()
         }
+        ; Warm the common card before installing navigation hooks, so the
+        ; first switch does not pay for DLL startup and initial font loading.
+        try VirtualDesktopState.Indicator.Warmup()
+        catch as err
+            VDLog("Desktop indicator warmup failed: " VDErrorText(err))
+        VDLog("Desktop indicator renderer; diagnostics=resident-cache-v1")
         ; Hooked hotkeys suppress Windows' cross-monitor move shortcuts.
         ; Permit one short reentry to latch a new press while Move is waiting.
         ; Busy rejects its operation; the latch also rejects later auto-repeat.
@@ -24,6 +32,7 @@ VirtualDesktopInit() {
         Hotkey "$#+Right", VDKeyDown.Bind(1, "Right"), "On T2 B0"
         Hotkey "$~*Left Up", VDKeyUp.Bind("Left"), "On"
         Hotkey "$~*Right Up", VDKeyUp.Bind("Right"), "On"
+        OnExit VDCloseIndicator
         VDLog("Virtual desktop ready; diagnostics=cleanup-v2")
         return true
     }
@@ -44,7 +53,7 @@ VirtualDesktopMove(direction) {
         VDLog("Operation result; action=move; direction=" direction "; result=disabled")
         return "disabled"
     }
-    return VirtualDesktopState.Controller.Move(direction)
+    return VDNavigateWithIndicator(VirtualDesktopState, true, direction)
 }
 
 VirtualDesktopSwitch(direction, focus := 0) {
@@ -53,7 +62,31 @@ VirtualDesktopSwitch(direction, focus := 0) {
         VDLog("Operation result; action=switch; direction=" direction "; result=disabled")
         return "disabled"
     }
-    return VirtualDesktopState.Controller.Switch(direction, focus)
+    return VDNavigateWithIndicator(VirtualDesktopState, false, direction, focus)
+}
+
+VDNavigateWithIndicator(state, move, direction, focus := 0) {
+    indicator := state.HasOwnProp("Indicator") ? state.Indicator : 0
+    revision := -1
+    if IsObject(indicator) && !state.Controller.Busy {
+        try revision := indicator.Begin()
+        catch as err
+            VDLog("Desktop indicator reset failed: " VDErrorText(err))
+    }
+    result := move ? state.Controller.Move(direction) : state.Controller.Switch(direction, focus)
+    if IsObject(indicator) && revision >= 0 {
+        try indicator.Complete(state.Controller.Api, result, revision)
+        catch as err
+            VDLog("Desktop indicator failed: " VDErrorText(err))
+    }
+    return result ; A display failure must never turn navigation into a failure.
+}
+
+VDCloseIndicator(*) {
+    global VirtualDesktopState
+    if IsSet(VirtualDesktopState) && IsObject(VirtualDesktopState)
+        && VirtualDesktopState.HasOwnProp("Indicator")
+        VirtualDesktopState.Indicator.Close()
 }
 
 VDSwitchKeyDown(direction, key, *) {

@@ -27,7 +27,9 @@ try {
         SwitchHiddenSourceProtection, SwitchSourceProtectionFailure,
         CleanupOccupiedImmediately, CleanupReorderOnFinalScan, CleanupUnknownOnFinalScan,
         CleanupSwitchOnFinalScan,
-        MoveContinuousCleanup, SwitchContinuousCleanup, MoveOperationLogs, SwitchOperationLogs] {
+        MoveContinuousCleanup, SwitchContinuousCleanup, MoveOperationLogs, SwitchOperationLogs,
+        IndicatorFinalMoveNumber, IndicatorFinalSwitchNumber, IndicatorIgnoredOperation,
+        IndicatorFailureIsolation, IndicatorChangedDuringQuery] {
         test.Call()
         count += 1
     }
@@ -50,6 +52,100 @@ FindLog(r, text) {
             return message
     }
     return ""
+}
+
+class SpyIndicator extends VDIndicator {
+    __New() {
+        super.__New()
+        this.Numbers := [], this.Closed := 0, this.Fail := false
+    }
+    Close(*) => this.Closed += 1
+    Show(number, revision := -1) {
+        if this.Fail
+            throw Error("Injected indicator display failure")
+        this.Numbers.Push(number)
+        return true
+    }
+}
+
+IndicatorFinalMoveNumber() {
+    for direction in [-1, 1] {
+        r := Rig(["A"]), indicator := SpyIndicator(), r.Indicator := indicator
+        r.Api.AfterMove := (hwnd, id) => Assert(indicator.Closed = 1,
+            "Dismiss the old card before moving or switching desktops")
+        Assert(VDNavigateWithIndicator(r, true, direction) = "moved")
+        Assert(indicator.Numbers.Length = 1 && indicator.Numbers[1] = 1
+            && r.Api.Ids.Length = 1, "Show the final index after boundary creation, reorder and removal")
+    }
+}
+
+IndicatorFinalSwitchNumber() {
+    for occupied in [false, true] {
+        r := Rig(), indicator := SpyIndicator(), r.Indicator := indicator
+        if !occupied
+            r.Api.Locations.Clear()
+        focus := FakeSwitchFocus()
+        Assert(VDNavigateWithIndicator(r, false, 1, focus) = "switched")
+        Assert(indicator.Numbers.Length = 1 && indicator.Numbers[1] = (occupied ? 2 : 1),
+            "The card must distinguish retained and removed sources")
+        Assert(VDOrder(focus.Calls) = "before|after|close|",
+            "Complete the focus handoff before presenting the card")
+    }
+}
+
+IndicatorIgnoredOperation() {
+    for expected in ["busy", "no-window", "pinned", "failed"] {
+        r := Rig(), indicator := SpyIndicator(), r.Indicator := indicator
+        switch expected {
+            case "busy": r.Controller.Busy := true
+            case "no-window": r.Windows.Active := false
+            case "pinned": r.Api.Pins[101] := true
+            case "failed": r.Api.Fail := "Snapshot"
+        }
+        Assert(VDNavigateWithIndicator(r, true, 1) = expected && indicator.Numbers.Length = 0,
+            "Ignored and failed operations must not display a success card")
+        Assert(indicator.Closed = (expected = "busy" ? 0 : 1),
+            "An ignored concurrent request must leave the active card alone")
+    }
+}
+
+IndicatorFailureIsolation() {
+    r := Rig(), indicator := SpyIndicator(), r.Indicator := indicator, indicator.Fail := true
+    Assert(VDNavigateWithIndicator(r, true, 1) = "moved" && VDOrder(r.Api.Ids) = "B|"
+        && !r.Controller.Busy, "A display failure must not undo or fail completed navigation")
+    r := Rig(), r.Indicator := SpyIndicator(), r.Windows.CanFocus := false
+    Assert(VDNavigateWithIndicator(r, true, 1) = "moved-retained" && r.Indicator.Numbers[1] = 2,
+        "A retained source after focus failure still requires the actual current index")
+}
+
+IndicatorChangedDuringQuery() {
+    indicator := SpyIndicator()
+    Assert(!indicator.Complete(ChangingIndicatorApi(), "switched") && indicator.Numbers.Length = 0,
+        "Do not show an index whose current-desktop identity changed during the query")
+    revision := indicator.Begin()
+    Assert(!indicator.Complete(SupersedingIndicatorApi(indicator), "switched", revision)
+        && indicator.Numbers.Length = 0, "A newer navigation must invalidate the older presentation")
+}
+
+class SupersedingIndicatorApi {
+    __New(indicator) {
+        this.Indicator := indicator
+        this.Triggered := false
+    }
+    Current() {
+        if !this.Triggered {
+            this.Triggered := true
+            this.Indicator.Begin()
+        }
+        return "A"
+    }
+    Index(id) => 0
+}
+
+class ChangingIndicatorApi {
+    __New() => this.Reads := 0
+    Current() => ++this.Reads = 1 ? "A" : "B"
+    Index(id) => 0
 }
 
 MoveOperationLogs() {

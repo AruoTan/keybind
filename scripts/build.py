@@ -32,6 +32,7 @@ def controller_tests(wine):
     pe_details(abi_dll)
     wine.test("controller-tests")
     wine.test("rdp-tests")
+    wine.test("indicator-tests")
     wine.test("guid-abi", windows_path(abi_dll))
     # Execute real window classification/capture. Only DWM cloaking requires
     # native Windows; compiling this test alone misses runtime scope errors.
