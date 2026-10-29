@@ -1,6 +1,6 @@
 # 发布指南
 
-版本由根目录 `VERSION` 管理，当前为 **2.3.0**。工作流位于 `.github/workflows/release.yml`，Scoop manifest 在发布时按实际安装包 SHA256 生成。
+版本由根目录 `VERSION` 管理，当前为 **2.3.1**。工作流位于 `.github/workflows/release.yml`，Scoop manifest 在发布时按实际安装包 SHA256 生成。
 
 ## 发布步骤
 
@@ -8,13 +8,13 @@
 
 ```bash
 python3 -m unittest discover -s tests/release -v
-python3 scripts/release.py validate --tag v2.3.0
+python3 scripts/release.py validate --tag v2.3.1
 ./build.sh
-git tag -a v2.3.0 -m "Release 2.3.0"
-git push origin v2.3.0
+git tag -a v2.3.1 -m "Release 2.3.1"
+git push origin v2.3.1
 ```
 
-推送 `vX.Y.Z` 标签自动触发发布。手动运行 **Release → Run workflow** 时，输入的标签必须已推送到远程且与该标签下的 `VERSION` 一致。`couldn't find remote ref refs/tags/v2.3.0` 表示标签尚未推送。
+推送 `vX.Y.Z` 标签自动触发发布。手动运行 **Release → Run workflow** 时，输入的标签必须已推送到远程且与该标签下的 `VERSION` 一致。`couldn't find remote ref refs/tags/v2.3.1` 表示标签尚未推送。
 
 重跑任务始终使用原标签的提交。构建修复后发布新版本；已发布 Release 不自动覆盖。
 
@@ -54,7 +54,7 @@ $keepass = & .\.devcontainer\scripts\setup-keepass.ps1
 将 `dist/keybind-keepass-ime.zip` 和 `build/metadata/keepass-build.json` 放回 Linux 工作区的同名路径，再执行：
 
 ```bash
-python3 scripts/release.py package --tag v2.3.0 --repository AruoTan/keybind
+python3 scripts/release.py package --tag v2.3.1 --repository AruoTan/keybind
 (cd dist/release && sha256sum -c SHA256SUMS)
 ```
 

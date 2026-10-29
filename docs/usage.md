@@ -26,6 +26,7 @@ Stop-Process -Name keybind
 | `Win+Ctrl+←/→` | 切换到左 / 右桌面，不移动窗口；空桌面也可操作 |
 | `Win+Shift+←/→` | 携带活动窗口移到左 / 右桌面并跟随；没有活动应用窗口时不操作 |
 | `Win+Ctrl+Space` | 开启或取消活动窗口置顶；RDP 会话获得焦点时让行 |
+| `Win+Shift+S` | 发送 `Win+Ctrl+Shift+S`；RDP 会话获得焦点时让行 |
 | 鼠标侧键 `XButton1` | 粘贴 |
 | 鼠标侧键 `XButton2` | 复制 |
 | 文件资源管理器内按鼠标中键 | 返回上一级目录 |

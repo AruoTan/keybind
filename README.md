@@ -18,6 +18,7 @@ keybind
 | `Win+Ctrl+←/→` | 切换桌面，边界自动创建，离开后清理空桌面 |
 | `Win+Shift+←/→` | 携带活动窗口切换桌面，沿用创建和清理规则 |
 | `Win+Ctrl+Space` | 切换活动窗口置顶状态 |
+| `Win+Shift+S` | 发送 `Win+Ctrl+Shift+S` |
 | 鼠标侧键 `XButton1` / `XButton2` | 粘贴 / 复制 |
 | 文件资源管理器内按鼠标中键 | 返回上一级目录 |
 
@@ -44,4 +45,4 @@ keybind
 
 输出为 `dist/keybind-windows-x64.zip`。Windows 端无需安装开发工具，环境配置见 [.devcontainer/README.md](.devcontainer/README.md)。
 
-版本 **2.3.0** · [GPL-3.0-only](LICENSE)
+版本 **2.3.1** · [GPL-3.0-only](LICENSE)
