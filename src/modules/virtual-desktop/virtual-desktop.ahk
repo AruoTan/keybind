@@ -2,6 +2,7 @@
 #Include %A_LineFile%/../controller.ahk
 #Include %A_LineFile%/../native.ahk
 #Include %A_LineFile%/../windows.ahk
+#Include %A_LineFile%/../monitors.ahk
 #Include %A_LineFile%/../indicator.ahk
 
 ; AutoHotkey v2, Windows x64. Including this file alone registers no hotkeys.
@@ -15,8 +16,14 @@ VirtualDesktopInit() {
         api := VDNative(dll)
         api.Snapshot() ; Includes GUID ABI and index round-trip checks.
         api.Current()
+        windows := VDWindows(), monitors := VDMonitorApi(api, windows)
+        monitors.Recover()
+        nativeController := VDController(api, windows)
         VirtualDesktopState := {
-            Controller: VDController(api, VDWindows()), Held: Map("Left", false, "Right", false),
+            Controller: nativeController, NativeController: nativeController,
+            MonitorController: VDController(monitors, windows), Monitors: monitors,
+            Navigating: false,
+            Held: Map("Left", false, "Right", false),
             Indicator: VDIndicator()
         }
         ; Warm the common card before installing navigation hooks, so the
@@ -33,6 +40,9 @@ VirtualDesktopInit() {
         Hotkey "$~*Left Up", VDKeyUp.Bind("Left"), "On"
         Hotkey "$~*Right Up", VDKeyUp.Bind("Right"), "On"
         OnExit VDCloseIndicator
+        OnExit VDMonitorClose
+        SetTimer VDMonitorRefresh, 500
+        VDLog("Monitor navigation ready; diagnostics=per-monitor-v1; displays=" MonitorGetCount())
         VDLog("Virtual desktop ready; diagnostics=cleanup-v2")
         return true
     }
@@ -65,21 +75,94 @@ VirtualDesktopSwitch(direction, focus := 0) {
     return VDNavigateWithIndicator(VirtualDesktopState, false, direction, focus)
 }
 
+VDNavigationBegin(state) {
+    wasCritical := A_IsCritical
+    Critical "On"
+    try {
+        if state.Controller.Busy || (state.HasOwnProp("Navigating") && state.Navigating)
+            return false
+        state.Navigating := true
+        return true
+    }
+    finally Critical wasCritical
+}
+
 VDNavigateWithIndicator(state, move, direction, focus := 0) {
-    indicator := state.HasOwnProp("Indicator") ? state.Indicator : 0
-    revision := -1
-    if IsObject(indicator) && !state.Controller.Busy {
-        try revision := indicator.Begin()
-        catch as err
-            VDLog("Desktop indicator reset failed: " VDErrorText(err))
+    if !VDNavigationBegin(state)
+        return state.Controller.Result(move ? "move" : "switch", direction, "busy")
+    captured := 0
+    try {
+        if state.HasOwnProp("Monitors") {
+            try {
+                if move {
+                    captured := state.Monitors.Windows.Capture(state.Monitors.Groups)
+                    if !IsObject(captured)
+                        return state.Controller.Result("move", direction, "no-window")
+                }
+                multi := state.Monitors.Prepare()
+                state.Controller := multi ? state.MonitorController : state.NativeController
+                if multi {
+                    if move && state.Monitors.Monitors.Window(captured.Root.Hwnd) != state.Monitors.Selected
+                        return state.Controller.Result("move", direction, "wrong-monitor")
+                    device := state.Monitors.Selected
+                    VDLog("Monitor route; device=" device "; host=" state.Monitors.Host)
+                    state.Indicator.Viewport := () => state.Monitors.Monitors.Work(device)
+                } else
+                    state.Indicator.Viewport := VDIndicatorViewport
+            }
+            catch as err {
+                VDReport("Monitor workspace preparation failed: " VDErrorText(err))
+                return state.Controller.Result(move ? "move" : "switch", direction, "failed")
+            }
+        }
+        indicator := state.HasOwnProp("Indicator") ? state.Indicator : 0
+        revision := -1
+        if IsObject(indicator) && !state.Controller.Busy {
+            try revision := indicator.Begin()
+            catch as err
+                VDLog("Desktop indicator reset failed: " VDErrorText(err))
+        }
+        result := move ? state.Controller.Move(direction, captured) : state.Controller.Switch(direction, focus)
+        if IsObject(indicator) && revision >= 0 {
+            try indicator.Complete(state.Controller.Api, result, revision)
+            catch as err
+                VDLog("Desktop indicator failed: " VDErrorText(err))
+        }
+        return result ; A display failure must never turn navigation into a failure.
     }
-    result := move ? state.Controller.Move(direction) : state.Controller.Switch(direction, focus)
-    if IsObject(indicator) && revision >= 0 {
-        try indicator.Complete(state.Controller.Api, result, revision)
-        catch as err
-            VDLog("Desktop indicator failed: " VDErrorText(err))
+    finally state.Navigating := false
+}
+
+VDMonitorRefresh(*) {
+    global VirtualDesktopState
+    state := VirtualDesktopState
+    if state.Monitors.Host = "" || !VDNavigationBegin(state)
+        return
+    try {
+        if state.Monitors.Faulted || state.Monitors.Native.Current() != state.Monitors.Host
+            || state.Monitors.Monitors.Signature() != state.Monitors.Topology {
+            state.Monitors.Reset()
+            state.Indicator.Begin()
+            VDLog("Monitor workspaces reset after native desktop or display change")
+        }
     }
-    return result ; A display failure must never turn navigation into a failure.
+    catch as err {
+        ; Stop repeated failed cleanup; the storage desktop remains
+        ; accessible in Task View and the next request retries recovery.
+        SetTimer VDMonitorRefresh, 0
+        VDReport("Monitor workspace recovery failed: " VDErrorText(err))
+    }
+    finally state.Navigating := false
+}
+
+VDMonitorClose(*) {
+    global VirtualDesktopState
+    SetTimer VDMonitorRefresh, 0
+    if IsSet(VirtualDesktopState) && IsObject(VirtualDesktopState) {
+        try VirtualDesktopState.Monitors.Reset()
+        catch as err
+            VDLog("Monitor workspace exit recovery failed: " VDErrorText(err))
+    }
 }
 
 VDCloseIndicator(*) {

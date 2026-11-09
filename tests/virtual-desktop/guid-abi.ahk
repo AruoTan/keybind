@@ -11,6 +11,16 @@ try {
         throw Error("GUID return value or desktop index round trip failed")
     if api.WindowId(101) != expected || api.Pinned(101)
         throw Error("Pointer-sized HWND or pin query failed")
+    api.Name(expected, "Keybind 测试 " expected)
+    if api.Name(expected) != "Keybind 测试 " expected
+        throw Error("UTF-8 desktop recovery name round trip failed")
+    setNameResult := DllCall("GetProcAddress", "Ptr", api.Module, "AStr", "SetTestNameResult", "Ptr")
+    for result in [0, -1] {
+        DllCall(setNameResult, "Int", result)
+        ExpectFailure(() => api.Name(expected), "GetDesktopName")
+        ExpectFailure(() => api.Name(expected, "unused"), "SetDesktopName")
+    }
+    DllCall(setNameResult, "Int", 1)
     failures := 0
     try api.Id(99)
     catch
@@ -45,7 +55,7 @@ try {
     api.Procs["GetDesktopIdByNumber"] := DllCall("GetProcAddress", "Ptr", api.Module,
         "AStr", "InvalidGuidReturn", "Ptr")
     ExpectFailure(() => api.Id(0), "Invalid GUID return ABI")
-    FileAppend "PASS: actual x64 GUID return/input ABI, HWND width, zero GUID, HRESULT/unassigned distinction and native error guards`n", logPath, "UTF-8"
+    FileAppend "PASS: actual x64 GUID return/input ABI, UTF-8 desktop names, HWND width, zero GUID, HRESULT/unassigned distinction and native error guards`n", logPath, "UTF-8"
     ExitApp 0
 }
 catch as err {

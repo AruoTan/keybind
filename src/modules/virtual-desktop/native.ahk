@@ -154,6 +154,26 @@ class VDNative {
     MoveWindow(hwnd, id) => this.Success("MoveWindowToDesktopNumber", "Ptr", hwnd, "Int", this.Index(id))
     Go(id) => this.Success("GoToDesktopNumber", "Int", this.Index(id))
 
+    Name(id, value?) {
+        ; Names are optional for the single-monitor backend; multi-monitor
+        ; storage must be identifiable after a forced process termination.
+        name := IsSet(value) ? "SetDesktopName" : "GetDesktopName"
+        address := DllCall("GetProcAddress", "Ptr", this.Module, "AStr", name, "Ptr")
+        if !address
+            throw Error("DLL is missing export: " name)
+        if IsSet(value) {
+            utf8 := Buffer(StrPut(value, "UTF-8"))
+            StrPut value, utf8, "UTF-8"
+            result := DllCall(address, "Int", this.Index(id), "Ptr", utf8, "Int")
+        } else {
+            utf8 := Buffer(4096, 0)
+            result := DllCall(address, "Int", this.Index(id), "Ptr", utf8, "UPtr", utf8.Size, "Int")
+        }
+        if result != 1
+            throw Error("VirtualDesktopAccessor failed: " name)
+        return IsSet(value) ? value : StrGet(utf8, "UTF-8")
+    }
+
     Remove(id, fallback) {
         if id = fallback || this.Int("GetDesktopCount") <= 1
             throw Error("Refusing to remove the last/current fallback desktop")

@@ -48,6 +48,7 @@ function Invoke-AhkTest([string]$Name, [string[]]$ExtraArguments = @()) {
 }
 
 Invoke-AhkTest 'controller-tests'
+Invoke-AhkTest 'monitor-tests'
 Invoke-AhkTest 'rdp-tests'
 Invoke-AhkTest 'indicator-tests'
 Invoke-AhkTest 'window-tests'

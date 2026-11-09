@@ -17,7 +17,7 @@ class VDController {
         this.Busy := false
     }
 
-    Move(direction) {
+    Move(direction, captured := 0) {
         if direction != -1 && direction != 1
             throw ValueError("Direction must be -1 or 1")
         this.Log.Call("Operation begin; action=move; direction=" direction)
@@ -27,8 +27,10 @@ class VDController {
         source := "", target := "", created := "", group := 0
         moveAttempted := false, switched := false
         try {
-            group := this.Windows.Capture()
+            group := IsObject(captured) ? captured : this.Windows.Capture()
             if !IsObject(group)
+                return this.Result("move", direction, "no-window")
+            if IsObject(captured) && !this.Windows.StillActive(group)
                 return this.Result("move", direction, "no-window")
             api := this.Api
             order := api.Snapshot()

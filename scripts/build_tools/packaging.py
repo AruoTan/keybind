@@ -26,6 +26,7 @@ def package(lock, stage, locations, dll_details):
         "rdpFocusHandoffTests": True, "windowsRdpKeyboardAfterSwitchTest": False,
         "continuousDesktopNavigationTests": True, "rememberedDesktopFocusTests": True,
         "dynamicDesktopSwitchTests": True,
+        "monitorWorkspaceTests": True, "windowsIndependentMonitorSwitchTest": False,
         "desktopIndicatorTests": True, "windowsDesktopIndicatorTest": False,
         "windowCaptureTests": True, "dwmCloakTests": False,
         "windowsWindowTests": False, "nativeQueriesChecked": False, "nativeDesktopOperationsChecked": False,
@@ -53,6 +54,10 @@ def package(lock, stage, locations, dll_details):
         "Win+Shift+Left/Right moves the active window and follows its desktop.\n"
         "Win+Ctrl+Left/Right switches desktops without moving windows, even from an empty desktop.\n"
         "Both shortcuts create a missing neighbor (left at the beginning) and collect an empty source.\n"
+        "With multiple monitors, only the monitor under the pointer changes workspace.\n"
+        "Win+Shift requires the active owner window to be on that monitor.\n"
+        "Inactive workspace windows stay accessible in a Keybind storage desktop in Task View.\n"
+        "Restarting recovers storage after a crash; monitor layout or native desktop changes reset workspaces.\n"
         "After cleanup, a click-through card shows the final desktop number for one second.\n"
         "The card does not suppress the native Windows desktop-switch popup.\n"
         "Minimized/hidden source apps are retained; pinned apps stay pinned. Unknown ownership retains the source.\n"

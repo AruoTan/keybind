@@ -104,12 +104,12 @@ class VDWindows {
         finally DetectHiddenWindows previous
     }
 
-    Ordinary(hwnd, owned := false) {
+    Ordinary(hwnd, owned := false, hidden := false) {
         if !DllCall("IsWindow", "Ptr", hwnd, "Int")
             return false
         ; WS_VISIBLE remains set for minimized and DWM-cloaked desktop windows.
         ; Do not exclude all cloaked windows: other-desktop apps are cloaked too.
-        if !DllCall("IsWindowVisible", "Ptr", hwnd, "Int") || this.System(hwnd)
+        if (!hidden && !DllCall("IsWindowVisible", "Ptr", hwnd, "Int")) || this.System(hwnd)
             return false
         style := DllCall("GetWindowLongPtrW", "Ptr", hwnd, "Int", -16, "Ptr")
         exStyle := DllCall("GetWindowLongPtrW", "Ptr", hwnd, "Int", -20, "Ptr")
@@ -136,21 +136,36 @@ class VDWindows {
         return result
     }
 
-    Capture() {
+    Capture(known := 0) {
         active := DllCall("GetForegroundWindow", "Ptr")
-        if !active || this.System(active)
+        return this.Group(active, known)
+    }
+
+    Group(active, known := 0) {
+        if !active || !this.Ordinary(active)
             return 0
-        root := DllCall("GetAncestor", "Ptr", active, "UInt", 3, "Ptr") ; GA_ROOTOWNER
-        if !root || !this.Ordinary(root) || !this.Ordinary(active)
-            return 0
+        root := this.Owner(active, known)
         main := this.Token(root)
         group := {Root: main, Active: this.Token(active), Members: [main]}
         for hwnd in this.All() {
-            if hwnd != root && DllCall("GetAncestor", "Ptr", hwnd, "UInt", 3, "Ptr") = root
-                && this.Ordinary(hwnd, true)
+            if hwnd != root && this.Ordinary(hwnd, true) && this.Owner(hwnd, known) = root
                 group.Members.Push(this.Token(hwnd))
         }
         return group
+    }
+
+    Owner(hwnd, known := 0) {
+        root := hwnd
+        owner := DllCall("GetWindow", "Ptr", hwnd, "UInt", 4, "Ptr") ; GW_OWNER
+        while owner {
+            ; Hidden framework owners do not merge independent app windows.
+            ; A previously tracked app may hide itself while parked (RDP).
+            if this.Ordinary(owner) || (IsObject(known) && known.Has(owner)
+                && this.Valid(known[owner].Group.Root) && this.Ordinary(owner, false, true))
+                root := owner
+            owner := DllCall("GetWindow", "Ptr", owner, "UInt", 4, "Ptr")
+        }
+        return root
     }
 
     StillActive(group) => this.Valid(group.Active)

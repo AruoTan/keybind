@@ -60,14 +60,14 @@ Windows 上退出已编译的 keybind，保留 `dist/windows-x64/VirtualDesktopA
 
 虚拟桌面入口提供 `VirtualDesktopInit()`、`VirtualDesktopMove(direction)` 和 `VirtualDesktopSwitch(direction, focus := 0)`，方向为 `-1` 或 `1`。初始化失败时停用桌面功能，鼠标、置顶与 KeePass 功能继续运行；RDP 拦截仅在虚拟桌面初始化成功后启动。
 
-`VDController` 接收 API 和窗口处理对象，负责操作顺序、确认、回退与清理。桌面身份始终使用 GUID，索引只在原生调用前解析。`Busy` 拒绝重入，轮询使用可中断的等待，新增绘制或消息处理不得阻塞键盘钩子。
+`VDController` 接收 API 和窗口处理对象，负责操作顺序、确认、回退与清理。单屏调用原生 API，多屏调用 `VDMonitorApi` 管理逐屏工作区；原生桌面身份使用 GUID，屏幕内工作区使用独立 ID。入口与恢复定时器共用 `Navigating` 标志，控制器用 `Busy` 保护操作，准备阶段也拒绝重入。轮询使用可中断的等待，新增绘制或消息处理不得阻塞键盘钩子。
 
 | 返回值 | 含义 |
 | --- | --- |
 | `moved` / `switched` | 移动或切换成功；源桌面可能因正常占用而保留 |
 | `moved-retained` / `switched-retained` | 已到达目标，但后续恢复或清理出错，保留源桌面 |
 | `switched-unfocused` | 已切换，目标焦点恢复失败，保留源桌面 |
-| `no-window` / `pinned` | 当前窗口不适合移动 |
+| `no-window` / `pinned` / `wrong-monitor` | 当前窗口不适合移动或不在鼠标选中的屏幕 |
 | `busy` / `held` | 正在操作或箭头仍按住 |
 | `disabled` / `failed` | 功能未启用或操作未完成 |
 
@@ -90,9 +90,10 @@ python3 -m unittest discover -s tests/release -v
 | 测试 | 覆盖 |
 | --- | --- |
 | `controller-tests.ahk` | 边界创建、GUID 与顺序变化、占用、回退、重复按键及最终提示编号 |
+| `monitor-tests.ahk` | 逐屏切换、未分配桌面的窗口、准备期重入与恢复互斥、原前台窗口保留、隐藏主窗口与新对话框、回退与重启恢复、真实窗口焦点及显示器发现 |
 | `rdp-tests.ahk` | 物理组合键、钩子回调、连续导航、固定窗口与记忆窗口的焦点恢复及直接输入 |
 | `indicator-tests.ahk` | 透明圆角、逐屏位置与 DPI、点击穿透、缓存、可中断绘制和资源生命周期 |
-| `guid-abi.c` / `guid-abi.ahk` | 真实 x64 GUID ABI、HWND 宽度、COM HRESULT 与零 GUID |
+| `guid-abi.c` / `guid-abi.ahk` | 真实 x64 GUID ABI、UTF-8 桌面名称、HWND 宽度、COM HRESULT 与零 GUID |
 | `window-tests.ahk` | 真实窗口分类、最小化、隐藏和所属对话框；Wine 跳过 DWM 用例 |
 | `startup-smoke.ahk` | 编译后主程序在缺少可选 DLL 时仍可启动 |
 
@@ -104,6 +105,8 @@ Windows 上已有 AutoHotkey v2 x64 时，可运行完整窗口测试及原生�
 
 多屏提示测试会在每块屏幕上激活测试窗口，按独立枚举的工作区和参考窗口 DPI 检查提示的显示器、尺寸、底部居中位置与焦点。验收时连接至少两块屏幕，设置不同缩放比例，并将一块屏幕放在主屏左侧或上方；缺少相应硬件布局时日志明确记录 `SKIP`。
 
+`monitor-tests.ahk` 用模拟显示设备和桌面 API 验证逐屏切换，并用真实 AHK 窗口检查焦点与直接输入；它不验证 Windows Shell 的真实窗口转移。原生验收需在两屏分别打开窗口，移动鼠标后逐屏往返，确认另一屏窗口和工作区编号保持不变，再检查插拔屏幕、任务视图切换、强制结束后从后台桌面找回窗口及重启恢复。
+
 KeePass 插件在独立 Windows 任务构建和验证，入口见 [KeePass 模块](keepass-ime.md)。Wine 测试不能验证 Windows Shell 桌面接口、真实 RDP 客户端或目标机器的截图与输入法行为；构建记录将这些实机项目保留为未验证。
 
 ## Windows 验收
@@ -114,6 +117,8 @@ KeePass 插件在独立 Windows 任务构建和验证，入口见 [KeePass 模�
 | 记事本、多窗口应用与模态对话框 | 只移动所属窗口组，保持活动窗口焦点 |
 | 最小化、固定与未知归属 | 最小化阻止删除，固定状态保留，查询失败不删除 |
 | 高权限窗口、多显示器与不同 DPI | 失败保留源桌面，提示位置、缩放、圆角和阴影正常 |
+| 逐屏工作区 | 鼠标选屏，仅选中屏幕切换、创建与清理；携带窗口跨屏错配时不操作 |
+| 断屏、原生桌面变化与重启 | 后台窗口完整恢复，用户原生桌面保留，单屏恢复原导航方式 |
 | 全屏 Windows App / mstsc | 桌面快捷键只控制本机；持续按住 Win+Ctrl 逐次按松箭头可往返 |
 | 返回 RDP 与离开后输入 | 自动恢复会话，键盘立即响应，不依赖鼠标点击 |
 | 重复切换 | 无明显卡顿、崩溃或 GDI/USER 资源持续增长 |

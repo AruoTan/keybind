@@ -20,6 +20,7 @@ REQUIRED_EXPORTS = {
     "GetDesktopCount", "GetCurrentDesktopNumber", "GetDesktopIdByNumber",
     "GetDesktopNumberById", "GetWindowDesktopId", "IsPinnedWindow", "IsPinnedApp",
     "CreateDesktop", "MoveDesktop", "MoveWindowToDesktopNumber", "GoToDesktopNumber", "RemoveDesktop",
+    "GetDesktopName", "SetDesktopName",
 }
 
 
@@ -31,6 +32,7 @@ def controller_tests(wine):
          TESTS / "guid-abi.c"])
     pe_details(abi_dll)
     wine.test("controller-tests")
+    wine.test("monitor-tests")
     wine.test("rdp-tests")
     wine.test("indicator-tests")
     wine.test("guid-abi", windows_path(abi_dll))

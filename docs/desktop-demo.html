@@ -16,10 +16,11 @@
 <header>
 <a class="brand" href="https://github.com/AruoTan/keybind">KEYBIND</a>
 <h1>虚拟桌面切换演示</h1>
-<p>选择场景，比较两种桌面快捷键。</p>
+<p>选择鼠标所在屏幕与场景，比较两种桌面快捷键。各屏幕独立创建、切换和清理工作区。</p>
 </header>
 <noscript><p>启用 JavaScript 后可操作演示。规则说明见<a href="https://github.com/AruoTan/keybind/blob/master/docs/usage.md#虚拟桌面规则">使用指南</a>。</p></noscript>
 <section class="panel toolbar" aria-label="演示设置">
+<label class="field"><span>鼠标所在屏幕</span><select id="screen"><option value="0">左屏</option><option value="1">右屏</option></select></label>
 <label class="field"><span>场景</span><select id="scenario">
 <option value="move">带走唯一窗口</option>
 <option value="left">向左边界创建</option>
@@ -42,6 +43,7 @@
 <div class="stage-head"><h2>桌面预览</h2><span class="position" id="position"></span></div>
 <div class="desktops" id="desktops"></div>
 <p class="summary">点击当前桌面内的普通窗口，可将它设为活动窗口。</p>
+<p class="summary" id="other-screen" aria-live="polite"></p>
 </section>
 <div class="notice" role="status" aria-live="polite"><span id="toast" class="toast">桌面 1</span></div>
 <section class="panel details">
@@ -66,15 +68,19 @@ const scenarios = {
   empty: {mode:"switch", apps:[[],[{id:"code",name:"编辑器"}]], active:null,
     intro:"当前没有活动应用。只切换仍可操作，携带窗口模式不会创建或切换桌面。"}
 };
-let state;
+let state, screens;
 let sequence = 0;
 const byId = id => document.getElementById(id);
 function makeDesktop(apps) { return {id:++sequence, apps:apps.map(app => ({...app}))}; }
 function loadScenario() {
   const scenario = scenarios[byId("scenario").value];
-  state = {desktops:scenario.apps.map(makeDesktop), current:null, active:scenario.active,
-    pinned:(scenario.pinned || []).map(app => ({...app})), mode:scenario.mode};
-  state.current = state.desktops[0].id;
+  screens = [0, 1].map(() => {
+    const screen = {desktops:scenario.apps.map(makeDesktop), active:scenario.active,
+      pinned:(scenario.pinned || []).map(app => ({...app})), mode:scenario.mode};
+    screen.current = screen.desktops[0].id;
+    return screen;
+  });
+  state = screens[Number(byId("screen").value)];
   render([scenario.intro]);
 }
 function setMode(mode) { state.mode = mode; render([mode === "move" ? "携带活动窗口前往相邻桌面，再清理空源桌面。" : "窗口留在原处，切换后清理空源桌面。"]); }
@@ -170,10 +176,21 @@ function render(steps) {
   });
   const number = state.desktops.findIndex(desktop => desktop.id === state.current) + 1;
   byId("position").textContent = "当前位置 " + number + " / " + state.desktops.length;
+  const otherIndex = 1 - Number(byId("screen").value);
+  const other = screens[otherIndex], otherDesktop = other.desktops.find(desktop => desktop.id === other.current);
+  const otherNumber = other.desktops.indexOf(otherDesktop) + 1;
+  const otherApps = [...otherDesktop.apps, ...other.pinned].map(app => app.name).join("、") || "没有应用窗口";
+  byId("other-screen").textContent = (otherIndex ? "右屏" : "左屏") + "保持在桌面 " + otherNumber + "：" + otherApps;
   byId("toast").textContent = "桌面 " + number;
   byId("steps").replaceChildren(...steps.map(text => { const item = document.createElement("li"); item.textContent = text; return item; }));
 }
 byId("scenario").addEventListener("change", loadScenario);
+byId("screen").addEventListener("change", () => {
+  const mode = state.mode;
+  state = screens[Number(byId("screen").value)];
+  state.mode = mode;
+  render(["只操作鼠标所在屏幕；另一屏幕的工作区与窗口保持原样。"]);
+});
 byId("reset").addEventListener("click", loadScenario);
 byId("move-mode").addEventListener("click", () => setMode("move"));
 byId("switch-mode").addEventListener("click", () => setMode("switch"));

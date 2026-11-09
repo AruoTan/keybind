@@ -20,6 +20,19 @@ API int MoveDesktop(int number, int index) { (void)number; (void)index; return -
 API int MoveWindowToDesktopNumber(void *hwnd, int number) { (void)hwnd; (void)number; return -1; }
 API int GoToDesktopNumber(int number) { (void)number; return -1; }
 API int RemoveDesktop(int number, int fallback) { (void)number; (void)fallback; return -1; }
+static char desktop_name[4096] = "Desktop";
+static int name_result = 1;
+API int SetDesktopName(int number, const char *name) {
+    if (number != 0 || strlen(name) >= sizeof(desktop_name)) return -1;
+    if (name_result == 1) strcpy(desktop_name, name);
+    return name_result;
+}
+API int GetDesktopName(int number, char *output, uintptr_t length) {
+    if (number != 0 || length < strlen(desktop_name) + 1) return -1;
+    if (name_result == 1) strcpy(output, desktop_name);
+    return name_result;
+}
+API void SetTestNameResult(int result) { name_result = result; }
 
 /* The real public COM call uses HRESULT + GUID*. Keep failures distinct from
  * S_OK/GUID_NULL; no Windows desktop manager is needed to exercise ComCall. */
