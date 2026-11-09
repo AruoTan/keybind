@@ -90,8 +90,8 @@ python3 -m unittest discover -s tests/release -v
 | 测试 | 覆盖 |
 | --- | --- |
 | `controller-tests.ahk` | 边界创建、GUID 与顺序变化、占用、回退、重复按键及最终提示编号 |
-| `rdp-tests.ahk` | 物理组合键、钩子回调、连续导航、焦点交接与直接输入 |
-| `indicator-tests.ahk` | 透明圆角、DPI、点击穿透、缓存、可中断绘制和资源生命周期 |
+| `rdp-tests.ahk` | 物理组合键、钩子回调、连续导航、固定窗口与记忆窗口的焦点恢复及直接输入 |
+| `indicator-tests.ahk` | 透明圆角、逐屏位置与 DPI、点击穿透、缓存、可中断绘制和资源生命周期 |
 | `guid-abi.c` / `guid-abi.ahk` | 真实 x64 GUID ABI、HWND 宽度、COM HRESULT 与零 GUID |
 | `window-tests.ahk` | 真实窗口分类、最小化、隐藏和所属对话框；Wine 跳过 DWM 用例 |
 | `startup-smoke.ahk` | 编译后主程序在缺少可选 DLL 时仍可启动 |
@@ -101,6 +101,8 @@ Windows 上已有 AutoHotkey v2 x64 时，可运行完整窗口测试及原生�
 ```powershell
 .\scripts\test-virtual-desktop.ps1 -AhkPath 'C:\Tools\AutoHotkey64.exe' -Exercise
 ```
+
+多屏提示测试会在每块屏幕上激活测试窗口，按独立枚举的工作区和参考窗口 DPI 检查提示的显示器、尺寸、底部居中位置与焦点。验收时连接至少两块屏幕，设置不同缩放比例，并将一块屏幕放在主屏左侧或上方；缺少相应硬件布局时日志明确记录 `SKIP`。
 
 KeePass 插件在独立 Windows 任务构建和验证，入口见 [KeePass 模块](keepass-ime.md)。Wine 测试不能验证 Windows Shell 桌面接口、真实 RDP 客户端或目标机器的截图与输入法行为；构建记录将这些实机项目保留为未验证。
 

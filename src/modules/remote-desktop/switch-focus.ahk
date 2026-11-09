@@ -104,6 +104,16 @@ class RDPSwitchFocus {
         this.Switched := true
         if api.Current() != target
             return false
+        token := this.SourceToken
+        if IsObject(token) {
+            try {
+                if this.Eligible(api, token, target) && api.Pinned(token.Hwnd)
+                    && api.Current() = target && this.Activate(token.Hwnd) {
+                    RemoteDesktopLog("Pinned source window focus restored; " this.Describe())
+                    return true
+                }
+            }
+        }
         remembered := this.History.Get(api, this.Windows, target)
         if IsObject(remembered) {
             token := remembered.Token

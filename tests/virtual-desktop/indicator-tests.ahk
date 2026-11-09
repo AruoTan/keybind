@@ -89,11 +89,8 @@ try {
         "Creating the indicator must restore the thread's DPI awareness")
     Check(DllCall("GetForegroundWindow", "Ptr") = main.Hwnd,
         "The default monitor/DPI path must also preserve the foreground")
-    viewport := VDIndicatorViewport()
-    WinGetPos &px, &py, &pw, &ph, "ahk_id " indicator.Window.Hwnd
-    Check(px >= viewport.Left && py >= viewport.Top && px + pw <= viewport.Right
-        && py + ph <= viewport.Bottom, "The default viewport must position the card inside the work area")
     indicator.Close()
+    MonitorPlacementTests(logPath)
     indicator := InterruptibleIndicator(2000, () => work)
     indicator.Show(1)
     Check(indicator.PreparedCritical = 0, "Expensive rendering must not run in Critical")
@@ -130,7 +127,7 @@ finally {
 ExitApp 0
 
 LayoutTests() {
-    for dpi in [96, 144, 192] {
+    for dpi in [96, 120, 144, 192] {
         work := {Left: -1920, Top: -200, Right: 0, Bottom: 840}
         layout := VDIndicatorLayout(work, dpi)
         Check(layout.Width = Round(128 * dpi / 96) && layout.Height = Round(48 * dpi / 96),
@@ -144,6 +141,66 @@ LayoutTests() {
     tiny := VDIndicatorLayout({Left: 10, Top: 20, Right: 90, Bottom: 50}, 192)
     Check(tiny.X = 10 && tiny.Y = 20 && tiny.Width = 80 && tiny.Height = 30,
         "Keep even unusually small work areas within bounds")
+}
+
+MonitorPlacementTests(logPath) {
+    count := MonitorGetCount(), dpis := Map(), negative := false
+    loop count {
+        number := A_Index, fixture := 0, card := VDIndicator(), context := 0
+        try {
+            context := DllCall("SetThreadDpiAwarenessContext", "Ptr", -4, "Ptr")
+            Check(context, "The monitor fixture must use physical coordinates")
+            MonitorGetWorkArea number, &left, &top, &right, &bottom
+            x := left + (right - left) // 2, y := top + (bottom - top) // 2
+            point := Buffer(8)
+            NumPut "Int", x, "Int", y, point
+            expectedMonitor := DllCall("MonitorFromPoint", "Int64", NumGet(point, 0, "Int64"),
+                "UInt", 0, "Ptr")
+            Check(expectedMonitor, "The enumerated work area must belong to a monitor")
+            fixture := Gui("-DPIScale", "Keybind monitor placement fixture")
+            fixture.Show("x" (x - 100) " y" (y - 50) " w200 h100")
+            Check(DllCall("GetAwarenessFromDpiAwarenessContext", "Ptr",
+                DllCall("GetWindowDpiAwarenessContext", "Ptr", fixture.Hwnd, "Ptr"), "Int") = 2,
+                "The reference window must be per-monitor DPI aware")
+            dpi := DllCall("GetDpiForWindow", "Ptr", fixture.Hwnd, "UInt")
+            Check(dpi > 0, "The reference window must have a valid monitor DPI")
+            DllCall("SetThreadDpiAwarenessContext", "Ptr", context, "Ptr")
+            context := 0
+            WinActivate "ahk_id " fixture.Hwnd
+            Check(WinWaitActive("ahk_id " fixture.Hwnd, , 1), "Activate the fixture on monitor " number)
+            Check(card.Show(number), "Show the indicator on monitor " number)
+            context := DllCall("SetThreadDpiAwarenessContext", "Ptr", -4, "Ptr")
+            Check(context, "Inspect the indicator in physical coordinates")
+            hwnd := card.Window.Hwnd
+            Check(DllCall("MonitorFromWindow", "Ptr", hwnd, "UInt", 0, "Ptr") = expectedMonitor,
+                "The card must follow the independently selected monitor " number)
+            WinGetPos &px, &py, &pw, &ph, "ahk_id " hwnd
+            width := Min(Round(128 * dpi / 96), right - left)
+            height := Min(Round(48 * dpi / 96), bottom - top)
+            Check(pw = width && ph = height && px = left + (right - left - width) // 2
+                && py = Max(top, bottom - height - Round(16 * dpi / 96)),
+                "Card size and bottom-center placement must match monitor " number " at DPI " dpi)
+            Check(DllCall("GetForegroundWindow", "Ptr") = fixture.Hwnd,
+                "The indicator must preserve focus on monitor " number)
+            dpis[dpi] := true
+            negative := negative || left < 0 || top < 0
+            FileAppend "PASS: monitor " number "; DPI=" dpi "; work=" left "," top "," right "," bottom "`n",
+                logPath, "UTF-8"
+        }
+        finally {
+            if context
+                DllCall("SetThreadDpiAwarenessContext", "Ptr", context, "Ptr")
+            card.Close()
+            if IsObject(fixture)
+                fixture.Destroy()
+        }
+    }
+    if count < 2
+        FileAppend "SKIP: multiple-monitor placement requires at least two connected monitors`n", logPath, "UTF-8"
+    if dpis.Count < 2
+        FileAppend "SKIP: mixed-DPI placement requires monitors with different scaling settings`n", logPath, "UTF-8"
+    if !negative
+        FileAppend "SKIP: native negative-origin placement requires a monitor left of or above the primary`n", logPath, "UTF-8"
 }
 
 AntialiasTests() {

@@ -61,12 +61,13 @@ try {
     NativeHookTests(fixtureHwnd)
     FocusHandoffTests(fixtureHwnd)
     RememberedFocusTests(fixtureHwnd)
+    PinnedFocusTests()
     RemoteDesktopStop()
     ProcessClose fixturePid
     fixturePid := 0
     DirDelete fixtureDir, true
     fixtureDir := ""
-    FileAppend "PASS: continuous Ctrl+Win navigation, remembered desktop focus, physical RDP chords, callback ABI and focus handoff/typing without a click`n", logPath, "UTF-8"
+    FileAppend "PASS: continuous Ctrl+Win navigation, pinned/remembered desktop focus, physical RDP chords, callback ABI and focus handoff/typing without a click`n", logPath, "UTF-8"
     ExitApp 0
 }
 catch as err {
@@ -166,6 +167,7 @@ class FocusFixtureApi {
         this.Origin := origin, this.Destination := destination
         this.Desktop := "source"
         this.SourcePinned := false, this.SourceLocation := "source", this.FailSourceQuery := false
+        this.FailPinQuery := false
     }
     Current() => this.Desktop
     WindowId(hwnd, *) {
@@ -173,7 +175,11 @@ class FocusFixtureApi {
             throw Error("Injected hidden-source query failure")
         return hwnd = this.Origin ? this.SourceLocation : (hwnd = this.Destination ? "target" : "")
     }
-    Pinned(hwnd) => hwnd = this.Origin && this.SourcePinned
+    Pinned(hwnd) {
+        if hwnd = this.Origin && this.FailPinQuery
+            throw Error("Injected pin query failure")
+        return hwnd = this.Origin && this.SourcePinned
+    }
 }
 
 class EmptyDesktopFocus extends RDPSwitchFocus {
@@ -311,6 +317,54 @@ RememberedFocusTests(origin) {
             focus.Close()
         if !localDestroyed
             localApp.Destroy()
+    }
+}
+
+PinnedFocusTests() {
+    origin := Gui(, "Keybind pinned input fixture")
+    edit := origin.AddEdit("w160")
+    destination := Gui(, "Keybind pinned focus destination")
+    destination.Show("NoActivate w200 h80")
+    focus := 0
+    try {
+        for state in ["pinned", "unpinned", "hidden", "minimized", "disabled", "stale", "query-failed"] {
+            origin.Show("w200 h80")
+            WinRestore "ahk_id " origin.Hwnd
+            DllCall("EnableWindow", "Ptr", origin.Hwnd, "Int", true, "Int")
+            api := FocusFixtureApi(origin.Hwnd, destination.Hwnd)
+            api.SourcePinned := true
+            history := RDPFocusHistory()
+            history.Remember(api, VDWindows(), "target", destination.Hwnd)
+            focus := RDPSwitchFocus(origin.Hwnd, 0, history)
+            Check(focus.Activate(origin.Hwnd), "Pinned fixture must start in foreground")
+            edit.Focus()
+            focus.Before(api, "source", "target")
+            switch state {
+                case "unpinned": api.SourcePinned := false
+                case "hidden": origin.Hide()
+                case "minimized": WinMinimize "ahk_id " origin.Hwnd
+                case "disabled": DllCall("EnableWindow", "Ptr", origin.Hwnd, "Int", false, "Int")
+                case "stale": focus.SourceToken := {Hwnd: origin.Hwnd, Pid: 0, Thread: 0}
+                case "query-failed": api.FailPinQuery := true
+            }
+            api.Desktop := "target"
+            Check(focus.After(api, "source", "target"), "Pinned handoff must complete: " state)
+            expected := state = "pinned" ? origin.Hwnd : destination.Hwnd
+            Check(DllCall("GetForegroundWindow", "Ptr") = expected,
+                "Only a still-eligible pinned origin takes priority over target history: " state)
+            focus.Close()
+            if state = "pinned" {
+                SendText "pinned-input-ok"
+                Sleep 50
+                Check(edit.Value = "pinned-input-ok", "Typing must return to the pinned application without a click")
+            }
+        }
+    }
+    finally {
+        if IsObject(focus)
+            focus.Close()
+        origin.Destroy()
+        destination.Destroy()
     }
 }
 
