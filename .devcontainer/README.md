@@ -19,6 +19,7 @@
 | `scripts/install-system.sh` | 安装本机编译器、MinGW、Wine、Xvfb、字体和 Python 等系统依赖 |
 | `scripts/setup-tools.sh` | 安装固定工具，`--check` 只检查，不下载 |
 | `scripts/setup-keepass.ps1` | Windows CI 下载并校验 KeePass 构建参考 |
+| `scripts/download-verified.sh` | Linux 工具下载校验与备用来源回退 |
 | `scripts/download-verified.ps1` | Windows 下载校验与镜像回退 |
 
 环境安装使用 Bash，Windows KeePass 参考下载使用 PowerShell。Python 负责项目构建与打包。Linux 本机 `cc` 用于 Rust 构建脚本和过程宏，MinGW 用于 Windows 目标链接，Wine/WoW64 用于运行 Ahk2Exe。
@@ -47,4 +48,4 @@ bash .devcontainer/scripts/setup-tools.sh
 
 Wine 前缀位于容器本地磁盘，构建结束只停止本工作区的 wineserver。同一工作区通过文件锁拒绝并发构建。
 
-Cargo 优先使用 `CARGO_HTTP_PROXY`，否则采用容器代理变量或直连，不继承宿主 Git 中可能指向 Windows localhost 的代理，也不修改 Git 配置。下载失败时检查 URL、实际 SHA256、字节数与文件格式；更换镜像不能跳过哈希校验。
+Cargo 优先使用 `CARGO_HTTP_PROXY`，否则采用容器代理变量或直连，不继承宿主 Git 中可能指向 Windows localhost 的代理，也不修改 Git 配置。Linux 工具下载按 `url`、`fallbackUrls` 顺序尝试；AutoHotkey 的 GitHub 地址失败时转到官网的固定版本归档。缓存与所有来源均校验同一 SHA256，失败不替换缓存并清理临时文件。下载失败时检查 URL、实际 SHA256、字节数与文件格式；更换镜像不能跳过哈希校验。

@@ -128,4 +128,4 @@ KeePass 插件在独立 Windows 任务构建和验证，入口见 [KeePass 模�
 
 使用规则集中在 `usage.md`，模块文档只解释实现约定，发布命令集中在 `releasing.md`。修改桌面行为时同步更新 `desktop-demo.html`；演示使用原生 HTML、CSS 和 JavaScript，无构建依赖，下载后可离线打开。它模拟规则，不调用 Windows 接口。
 
-发布前同步 `VERSION`、README、发布文档和工作流默认标签，执行版本与打包验证。发布步骤见 [发布指南](releasing.md)。
+发布版本取自标签，工作流自动传递 `KEYBIND_VERSION`；本地未指定时读取 `VERSION`。发布步骤见 [发布指南](releasing.md)。

@@ -12,9 +12,10 @@ $testDir = Join-Path $projectRoot 'tests\keepass-ime'
 $buildDir = Join-Path $projectRoot 'build\keepass-ime'
 $testBuildDir = Join-Path $projectRoot 'build\tests\keepass-ime'
 $distDir = Join-Path $projectRoot 'dist\plugins\keepass-ime'
-$version = (Get-Content -LiteralPath (Join-Path $projectRoot 'VERSION') -Raw).Trim()
-if ($version -notmatch '^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)$' -or @($version.Split('.') | Where-Object { [int64]$_ -gt 65535 }).Count) {
-    throw 'VERSION must contain a stable Windows-compatible major.minor.patch version.'
+$version = if (Test-Path Env:KEYBIND_VERSION) { $env:KEYBIND_VERSION }
+    else { (Get-Content -LiteralPath (Join-Path $projectRoot 'VERSION') -Raw).Trim() }
+if ($version -cnotmatch '\A(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)\z' -or @($version.Split('.') | Where-Object { [int64]$_ -gt 65535 }).Count) {
+    throw 'Version must be a stable Windows-compatible major.minor.patch version.'
 }
 $csc = Join-Path $env:WINDIR 'Microsoft.NET\Framework64\v4.0.30319\csc.exe'
 if (!$KeePassPath) {

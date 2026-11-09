@@ -56,27 +56,15 @@ ahk_version="$(value '.autohotkey.version')"
 compiler_version="$(value '.ahk2exe.version')"
 ahk_dir="$tools_root/autohotkey-$ahk_version"
 compiler_dir="$tools_root/ahk2exe-$compiler_version"
-partial_file=""
-trap 'if [[ -n "$partial_file" ]]; then rm -f -- "$partial_file"; fi' EXIT
+. "$setup_dir/scripts/download-verified.sh"
 
-verify_hash() {
-    [[ "$(sha256sum -- "$1" | cut -d ' ' -f 1)" == "$2" ]]
-}
 fetch() {
     local item="$1" destination="$2" url expected_hash
+    local -a fallback_urls
     url="$(value ".$item.url")"
     expected_hash="$(value ".$item.sha256")"
-    if [[ -f "$destination" ]] && verify_hash "$destination" "$expected_hash"; then
-        return
-    fi
-    mkdir -p -- "$(dirname -- "$destination")"
-    partial_file="$(mktemp "$destination.partial.XXXXXX")"
-    echo "Downloading $url"
-    curl --fail --location --retry 3 --connect-timeout 30 --max-time 300 \
-        --user-agent keybind-build --output "$partial_file" "$url"
-    verify_hash "$partial_file" "$expected_hash" || fail "SHA256 mismatch: $destination"
-    mv -- "$partial_file" "$destination"
-    partial_file=""
+    mapfile -t fallback_urls < <(jq -r ".$item.fallbackUrls // [] | .[]" "$lock_file")
+    keybind_download_verified "$destination" "$expected_hash" "$url" "${fallback_urls[@]}"
 }
 
 if [[ "$check_only" == 0 ]]; then

@@ -45,4 +45,4 @@ keybind
 
 输出为 `dist/keybind-windows-x64.zip`。Windows 端无需安装开发工具，环境配置见 [.devcontainer/README.md](.devcontainer/README.md)。
 
-版本 **2.3.1** · [GPL-3.0-only](LICENSE)
+[最新版本](https://github.com/AruoTan/keybind/releases/latest) · [GPL-3.0-only](LICENSE)

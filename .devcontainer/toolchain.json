@@ -11,7 +11,10 @@
   "autohotkey": {
     "version": "2.0.30",
     "url": "https://github.com/AutoHotkey/AutoHotkey/releases/download/v2.0.30/AutoHotkey_2.0.30.zip",
-    "sha256": "1e0ece7ecb2d5646e55758150472677996a57f9db5c83d2996d8b47b9e2f31a4"
+    "sha256": "1e0ece7ecb2d5646e55758150472677996a57f9db5c83d2996d8b47b9e2f31a4",
+    "fallbackUrls": [
+      "https://www.autohotkey.com/download/2.0/AutoHotkey_2.0.30.zip"
+    ]
   },
   "ahk2exe": {
     "version": "Ahk2Exe1.1.37.02a2",

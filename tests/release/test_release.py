@@ -8,8 +8,13 @@ import tempfile
 import unittest
 import zipfile
 
+from unittest.mock import patch
+
 PROJECT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(PROJECT / "scripts"))
+from build_tools.version import read_version
+from build_tools.packaging import package as package_portable
+
 spec = importlib.util.spec_from_file_location("keybind_release", PROJECT / "scripts/release.py")
 release = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(release)
@@ -27,7 +32,7 @@ class ReleaseTests(unittest.TestCase):
         self.records.mkdir(parents=True)
         self.windows.mkdir(parents=True)
         self.stage.mkdir()
-        self.version = release.read_version()
+        self.version = read_version()
         self.tag = "v" + self.version
         for name in release.BUILD_FILES:
             (self.windows / name).write_bytes(("fixture " + name).encode())
@@ -113,11 +118,39 @@ class ReleaseTests(unittest.TestCase):
             self.assertEqual(sha256, release.digest(self.stage / name))
         self.assertEqual(set(records), set(release.RELEASE_FILES))
 
-    def test_only_matching_stable_tag_is_allowed(self):
+    def test_stable_tag_determines_release_version(self):
         self.assertEqual(release.validate_tag(self.tag), self.version)
-        for tag in (self.version, "v0.0.0", self.tag + "-rc.1", "refs/tags/" + self.tag, "v1.0.0\nmalicious"):
+        with patch.dict("os.environ", {"KEYBIND_VERSION": "invalid"}):
+            self.assertEqual(release.validate_tag("v2.4.0"), "2.4.0")
+        for tag in (self.version, "v01.0.0", "v65536.0.0", self.tag + "-rc.1",
+                    "refs/tags/" + self.tag, "v1.0.0\nmalicious", "v1.0.0\n"):
             with self.subTest(tag=tag), self.assertRaises(ValueError):
                 release.validate_tag(tag)
+
+    def test_new_tag_packages_matching_builds_without_changing_version_file(self):
+        self.version, self.tag = "2.4.0", "v2.4.0"
+        self.build_manifest["version"] = self.version
+        self.write_build_manifest()
+        self.write_plugin()
+        with patch.dict("os.environ", {"KEYBIND_VERSION": "0.0.0"}):
+            self.package()
+        manifest = json.loads((self.stage / "keybind.json").read_text())
+        self.assertEqual(manifest["version"], "2.4.0")
+        self.assertIn("/v2.4.0/", manifest["architecture"]["64bit"]["url"])
+        self.assertTrue((self.stage / "release-notes.md").read_text().startswith("Keybind 2.4.0\n"))
+
+    def test_portable_metadata_and_readme_use_release_override(self):
+        (self.root / "license.txt").write_text("AHK license fixture")
+        locations = {"cargo": "cargo", "rustup": "rustup", "ahk": self.root / "AutoHotkey64.exe"}
+        lock = {"rust": {"version": "1.90.0", "target": "x86_64-pc-windows-gnu"}}
+        with patch.dict("os.environ", {"KEYBIND_VERSION": "2.4.0"}), \
+                patch("build_tools.packaging.run", return_value="fixture tool"), \
+                patch("build_tools.packaging.tools.wine_binary", return_value="wine"):
+            package_portable(lock, self.windows, locations, {})
+        metadata = json.loads((self.input / "keybind-build.json").read_text())
+        self.assertEqual(metadata["version"], "2.4.0")
+        with zipfile.ZipFile(self.input / release.PORTABLE_ZIP) as archive:
+            self.assertTrue(archive.read("README.txt").startswith(b"Keybind 2.4.0 "))
 
     def test_repository_is_validated(self):
         for repository in ("https://github.com/AruoTan/keybind", "AruoTan/keybind/extra", "AruoTan/keybind\n", "AruoTan/$(cmd)"):

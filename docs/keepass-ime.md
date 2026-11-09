@@ -33,4 +33,4 @@ Linux 主构建包含 AHK 模块，C# 插件由独立 Windows 任务构建。插
 | `build/metadata/keepass-build.json` | 版本、哈希与加载检查记录 |
 | `build/tests/keepass-ime/` | 测试日志与程序 |
 
-程序集版本读取根目录 `VERSION`。GitHub Release 在 Windows 任务中下载校验过的 KeePass 参考并构建插件；日常 Linux 开发无需安装 KeePass。高权限目标窗口、不同输入法及真实自动输入需在 Windows 上验收。
+程序集版本优先读取 `KEYBIND_VERSION`，未指定时读取根目录 `VERSION`。GitHub Release 自动传入标签版本，在 Windows 任务中下载校验过的 KeePass 参考并构建插件；日常 Linux 开发无需安装 KeePass。高权限目标窗口、不同输入法及真实自动输入需在 Windows 上验收。

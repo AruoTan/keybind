@@ -13,7 +13,7 @@ import zipfile
 
 from build_tools.common import BUILD, DIST, PROJECT
 from build_tools.toolchain import digest
-from build_tools.version import read_version
+from build_tools.version import validate_version
 
 RUNTIME_FILES = ("keybind.exe", "VirtualDesktopAccessor.dll")
 BUILD_FILES = (*RUNTIME_FILES, "verify-virtual-desktop.exe")
@@ -24,10 +24,9 @@ RELEASE_FILES = (PORTABLE_ZIP, SCOOP_ZIP, PLUGIN_ZIP, "keybind.json", "LICENSE")
 
 
 def validate_tag(tag):
-    version = read_version()
-    if tag != "v" + version:
-        raise ValueError(f"Release tag must be v{version}, matching VERSION; got {tag!r}.")
-    return version
+    if not tag.startswith("v"):
+        raise ValueError(f"Release tag must use vMAJOR.MINOR.PATCH; got {tag!r}.")
+    return validate_version(tag[1:])
 
 
 def validate_repository(repository):
@@ -66,7 +65,7 @@ def verify_build(input_dir, version, records_dir):
     windows = input_dir / "windows-x64"
     metadata = json.loads((records_dir / "keybind-build.json").read_text())
     if metadata.get("version") != version:
-        raise ValueError("Build version does not match VERSION; run ./build.sh again.")
+        raise ValueError("Build version does not match the release tag; rebuild with KEYBIND_VERSION=" + version)
     records = {item["file"]: item["sha256"] for item in metadata["artifacts"]}
     for name in BUILD_FILES:
         if records.get(name) != digest(windows / name):
@@ -90,7 +89,7 @@ def verify_plugin(path, version, records_dir):
             raise ValueError("Unexpected KeePass ZIP contents.")
         metadata = json.loads((records_dir / "keepass-build.json").read_text(encoding="utf-8-sig"))
         if metadata.get("version") != version or metadata.get("pluginLoadTest") is not True:
-            raise ValueError("KeePass plugin must match VERSION and pass its loading test.")
+            raise ValueError("KeePass plugin must match the release tag and pass its loading test.")
         if hashlib.sha256(archive.read("KeybindImeBridge.dll")).hexdigest() != metadata["sha256"].lower():
             raise ValueError("KeePass plugin hash mismatch.")
 
@@ -133,7 +132,7 @@ def write_assets(input_dir, stage, repository, tag, records_dir=None):
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     commands = parser.add_subparsers(dest="command", required=True)
-    validate = commands.add_parser("validate", help="Require a stable tag matching VERSION")
+    validate = commands.add_parser("validate", help="Validate a stable release tag and print its version")
     validate.add_argument("--tag", required=True)
     package = commands.add_parser("package", help="Assemble Release assets from completed builds")
     package.add_argument("--tag", required=True)
