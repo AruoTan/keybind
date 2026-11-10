@@ -14,10 +14,10 @@ try {
     if !InStr(diagnostic, "Virtual desktop init; diagnostics=cleanup-v2; PID=" childPid ";")
         throw Error("Compiled main did not log its cleanup diagnostic marker and PID")
     placement := FileRead(EnvGet("LOCALAPPDATA") "\keybind\window-placement.log", "UTF-8")
-    if !InStr(placement, "Ready; PID=" childPid ";")
-        throw Error("Window placement must initialize even when the virtual desktop DLL is missing")
+    if !InStr(placement, "Ready; PID=" childPid "; mode=pre-show-only;")
+        throw Error("Pre-show-only placement must initialize even when the virtual desktop DLL is missing")
     if nativePlacement {
-        if !RegExMatch(placement, "Native pre-show ready; ABI=2; PID=" childPid
+        if !RegExMatch(placement, "Native pre-show ready; ABI=3; PID=" childPid
             "; x64 hook installed; x86-host-pid=(\d+)", &match)
             throw Error("Compiled main did not initialize the native placement bridge")
         helperPid := Integer(match[1])

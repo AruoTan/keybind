@@ -2,7 +2,7 @@
 ; Leave other Win shortcuts to the remote session while an RDP client has focus.
 #HotIf !RemoteDesktopActive()
 #+s::Send "#^+s"
-~#r::WindowPlacementRun()
+$#r::WindowPlacementRun()
 
 #^SPACE:: {
     WinSetAlwaysOnTop -1, "A"

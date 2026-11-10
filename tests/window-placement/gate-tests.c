@@ -4,7 +4,7 @@
 #define _WIN32_WINNT 0x0A00
 #include "../../src/native/window-placement/protocol.h"
 #undef PLACEMENT_MAPPING
-#define PLACEMENT_MAPPING L"Local\\Keybind.Placement.GateTests.v2"
+#define PLACEMENT_MAPPING L"Local\\Keybind.Placement.GateTests.v3"
 #include "../../src/native/window-placement/hook.c"
 #include <stdio.h>
 

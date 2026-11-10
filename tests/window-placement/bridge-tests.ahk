@@ -12,6 +12,8 @@ try {
         Sleep 20
     Check(bridge.Host && ProcessExist(bridge.Host) && bridge.HostReported, "AHK starts and observes native x86 host")
     Check(DllCall(bridge.Functions["Status"], "UInt", 0, "UInt") = bridge.Host, "Observe actual x86 hook readiness")
+    Check(bridge.RequestRun(VDMonitors().Pointer()), "Publish Run target through the AHK bridge")
+    Check(!bridge.RequestRun("MISSING"), "Reject an unknown Run target")
     gateCalls := [], allowed := false
     state := {Controller: {Busy: false}, PlacementGate: (block) => (gateCalls.Push(block), !block || allowed)}
     Check(!VDNavigationBegin(state) && !state.HasOwnProp("Navigating"), "Reject navigation while a native show is in flight")

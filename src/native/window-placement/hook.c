@@ -118,26 +118,28 @@ static BOOL Ordinary(HWND window) {
         if (!_wcsicmp(name, excluded[i])) return FALSE;
     return window != GetShellWindow() && window != GetDesktopWindow();
 }
-static BOOL RunDialog(HWND window) {
+static BOOL ExplorerDialog(HWND window) {
     WCHAR name[64], path[MAX_PATH];
-    if (!GetDlgItem(window, 0x3002) || !GetClassNameW(window, name, 64) || wcscmp(name, L"#32770")) return FALSE;
+    if (!GetClassNameW(window, name, 64) || wcscmp(name, L"#32770")) return FALSE;
     if (!GetModuleFileNameW(NULL, path, MAX_PATH)) return FALSE;
     WCHAR *file = wcsrchr(path, L'\\');
     return !_wcsicmp(file ? file + 1 : path, L"explorer.exe");
+}
+static BOOL RunDialog(HWND window) {
+    return ExplorerDialog(window) && GetDlgItem(window, 0x3002) != NULL;
 }
 typedef struct {
     DWORD owner, epoch;
     FILETIME born;
     HMONITOR target;
-    BOOL inside, done, dead, restoring, opening;
+    BOOL inside, done, dead, restoring, opening, run;
+    LONG runLeft, runBottom;
+    UINT runDpi;
     HANDLE gate;
     LONG references;
 } WindowState;
 
-static HANDLE AcquireGate(DWORD owner, FILETIME born, DWORD epoch) {
-    WCHAR name[128];
-    swprintf(name, 128, PLACEMENT_MAPPING L".Gate.%lu.%08lx%08lx.%lu",
-        owner, born.dwHighDateTime, born.dwLowDateTime, epoch);
+static HANDLE AcquireMutex(const WCHAR *name) {
     HANDLE gate = CreateMutexW(NULL, FALSE, name);
     if (!gate) return NULL;
     /* A dead application abandons the mutex instead of leaving a permanent count. */
@@ -145,6 +147,12 @@ static HANDLE AcquireGate(DWORD owner, FILETIME born, DWORD epoch) {
     if (wait == WAIT_OBJECT_0 || wait == WAIT_ABANDONED) return gate;
     CloseHandle(gate);
     return NULL;
+}
+static HANDLE AcquireGate(DWORD owner, FILETIME born, DWORD epoch) {
+    WCHAR name[128];
+    swprintf(name, 128, PLACEMENT_MAPPING L".Gate.%lu.%08lx%08lx.%lu",
+        owner, born.dwHighDateTime, born.dwLowDateTime, epoch);
+    return AcquireMutex(name);
 }
 static void ReleaseGate(HANDLE gate) {
     ReleaseMutex(gate);
@@ -202,6 +210,43 @@ static HMONITOR Target(HWND window) {
     return GetCursorPos(&point) ? MonitorFromPoint(point, MONITOR_DEFAULTTONEAREST) : NULL;
 }
 
+typedef struct { const WCHAR *device; HMONITOR monitor; } MonitorSearch;
+static BOOL CALLBACK FindMonitor(HMONITOR monitor, HDC dc, LPRECT rect, LPARAM data) {
+    (void)dc; (void)rect;
+    MonitorSearch *search = (MonitorSearch *)data;
+    MONITORINFOEXW info = {0}; info.cbSize = sizeof(info);
+    if (GetMonitorInfoW(monitor, (LPMONITORINFO)&info) && !wcscmp(info.szDevice, search->device)) {
+        search->monitor = monitor;
+        return FALSE;
+    }
+    return TRUE;
+}
+static HMONITOR DeviceMonitor(const WCHAR *device) {
+    MonitorSearch search = {device, NULL};
+    EnumDisplayMonitors(NULL, NULL, FindMonitor, (LPARAM)&search);
+    return search.monitor;
+}
+__declspec(dllexport) BOOL WINAPI PlacementRun(const WCHAR *device) {
+    if (!shared || shared->owner != GetCurrentProcessId() || !device
+        || wcslen(device) >= CCHDEVICENAME || !DeviceMonitor(device)) return FALSE;
+    HANDLE mutex = AcquireMutex(PLACEMENT_MAPPING L".RunRequest");
+    if (!mutex) return FALSE;
+    wcscpy(shared->runDevice, device);
+    shared->runDeadline = GetTickCount() + 1000;
+    ReleaseGate(mutex);
+    return TRUE;
+}
+static HMONITOR TakeRunTarget(void) {
+    HANDLE mutex = AcquireMutex(PLACEMENT_MAPPING L".RunRequest");
+    if (!mutex) return NULL;
+    WCHAR device[CCHDEVICENAME] = {0};
+    if (shared->runDevice[0] && (LONG)(shared->runDeadline - GetTickCount()) >= 0)
+        wcscpy(device, shared->runDevice);
+    shared->runDeadline = 0; shared->runDevice[0] = 0;
+    ReleaseGate(mutex);
+    return device[0] ? DeviceMonitor(device) : NULL;
+}
+
 static void ReleaseState(WindowState *state) {
     if (!InterlockedDecrement(&state->references)) HeapFree(GetProcessHeap(), 0, state);
 }
@@ -213,14 +258,58 @@ static void Finish(HWND window, UINT_PTR id, WindowState *state) {
     ReleaseState(state);
 }
 
+static BOOL RouteRun(HWND window, WINDOWPOS *position, WindowState *state) {
+    /* A missed hidden-show opportunity leaves the window in place. */
+    if (IsWindowVisible(window) || !(state->target = TakeRunTarget())) return FALSE;
+    MONITORINFO target = {sizeof(target), {0}, {0}, 0};
+    if (!GetMonitorInfoW(state->target, &target)) return FALSE;
+    DPI_AWARENESS_CONTEXT previous = SetThreadDpiAwarenessContext(DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2);
+    BOOL routed = FALSE;
+    RECT rect;
+    if (!GetWindowRect(window, &rect)) goto done;
+    LONG width = (position->flags & SWP_NOSIZE) ? rect.right - rect.left : position->cx;
+    LONG height = (position->flags & SWP_NOSIZE) ? rect.bottom - rect.top : position->cy;
+    if (width <= 0 || height <= 0) goto done;
+    if (!(position->flags & SWP_NOMOVE)) {
+        rect.left = position->x; rect.top = position->y;
+    }
+    rect.right = rect.left + width; rect.bottom = rect.top + height;
+    if (!state->runDpi) {
+        UINT dpi = GetDpiForWindow(window);
+        MONITORINFO source = {sizeof(source), {0}, {0}, 0};
+        if (!dpi || !GetMonitorInfoW(MonitorFromRect(&rect, MONITOR_DEFAULTTONEAREST), &source)) goto done;
+        state->runDpi = dpi;
+        state->runLeft = max(0, rect.left - source.rcWork.left);
+        state->runBottom = max(0, source.rcWork.bottom - rect.bottom);
+    }
+    /* Let the host process its real DPI change while the dialog is still hidden. */
+    if (!SetWindowPos(window, NULL, target.rcWork.left, target.rcWork.top, width, height,
+        SWP_NOACTIVATE | SWP_NOZORDER) || state->dead
+        || !Active() || (DWORD)(GateValue() >> 32) != state->epoch || !GetWindowRect(window, &rect)) goto done;
+    UINT dpi = GetDpiForWindow(window);
+    if (!dpi) goto done;
+    width = rect.right - rect.left; height = rect.bottom - rect.top;
+    LONG x = target.rcWork.left + MulDiv(state->runLeft, dpi, state->runDpi);
+    LONG y = target.rcWork.bottom - height - MulDiv(state->runBottom, dpi, state->runDpi);
+    position->x = max(target.rcWork.left, min(x, target.rcWork.right - width));
+    position->y = max(target.rcWork.top, min(y, target.rcWork.bottom - height));
+    position->cx = width; position->cy = height;
+    position->flags &= ~(SWP_NOMOVE | SWP_NOSIZE);
+    InterlockedIncrement(&shared->placed);
+    routed = TRUE;
+done:
+    if (previous) SetThreadDpiAwarenessContext(previous);
+    return routed;
+}
 static BOOL Route(HWND window, WINDOWPOS *position, WindowState *state) {
     if (!Active() || shared->owner != state->owner || !SameTime(shared->born, state->born)
-        || !Ordinary(window) || RunDialog(window)) return FALSE;
+        || !Ordinary(window)) return FALSE;
     if (!EnterGate(state) || !Active()) return FALSE;
     DWORD cloak = 0;
     /* Failed or shell-cloaked queries never authorize a move across desktops. */
     if (FAILED(DwmGetWindowAttribute(window, DWMWA_CLOAKED, &cloak, sizeof(cloak))) || cloak)
         return FALSE;
+    if (state->run) return RouteRun(window, position, state);
     if (!state->target) state->target = Target(window);
     MONITORINFO target = {sizeof(target), {0}, {0}, 0};
     if (!state->target || !GetMonitorInfoW(state->target, &target)) return FALSE;
@@ -282,12 +371,27 @@ static LRESULT CALLBACK WindowProc(HWND window, UINT message, WPARAM wparam, LPA
         result = subclassApi.Next(window, message, wparam, lparam);
         goto done;
     }
+    if (message == WM_WINDOWPOSCHANGED && state->run && !state->inside && !state->gate) {
+        WINDOWPOS *position = (WINDOWPOS *)lparam;
+        /* Keep exact DPI margins across reopens until the host moves or resizes the dialog. */
+        if ((position->flags & (SWP_NOMOVE | SWP_NOSIZE)) != (SWP_NOMOVE | SWP_NOSIZE))
+            state->runDpi = 0;
+    }
     if (message == WM_WINDOWPOSCHANGED && state->done && !state->restoring) {
         state->restoring = TRUE;
         if (IsZoomed(window) && Alive() && shared->enabled && shared->owner == state->owner
             && SameTime(shared->born, state->born)) RestoreBounds(window, state->target);
         state->restoring = FALSE;
-        Finish(window, id, state);
+        if (state->run) LeaveGate(state);
+        else Finish(window, id, state);
+    }
+    if ((message == WM_SHOWWINDOW && !wparam)
+        || (message == WM_WINDOWPOSCHANGING && (((WINDOWPOS *)lparam)->flags & SWP_HIDEWINDOW))) {
+        if (state->run) {
+            LeaveGate(state);
+            state->done = FALSE; state->opening = FALSE; state->target = NULL;
+            RemovePropW(window, PLACEMENT_DONE);
+        }
     }
     if (message == WM_SHOWWINDOW && wparam) {
         state->opening = TRUE;
@@ -300,11 +404,24 @@ static LRESULT CALLBACK WindowProc(HWND window, UINT message, WPARAM wparam, LPA
         result = subclassApi.Next(window, message, wparam, lparam);
         state->inside = FALSE;
         if (!state->dead && (position->flags & SWP_SHOWWINDOW)) {
-            state->done = TRUE;
+            state->run = RunDialog(window);
+            if (state->run && Active()) {
+                /* A reused Run dialog may survive a controller restart. */
+                state->owner = shared->owner; state->born = shared->born;
+                state->epoch = (DWORD)(GateValue() >> 32);
+            }
+            state->inside = TRUE;
             BOOL routed = Route(window, position, state);
-            if (!routed && shared) InterlockedIncrement(&shared->skipped);
-            if (routed) SetPropW(window, PLACEMENT_DONE, (HANDLE)(ULONG_PTR)1);
-            if (!routed) Finish(window, id, state);
+            state->inside = FALSE;
+            if (!state->dead) {
+                state->done = TRUE;
+                if (!routed && shared) InterlockedIncrement(&shared->skipped);
+                if (routed) SetPropW(window, PLACEMENT_DONE, (HANDLE)(ULONG_PTR)1);
+                if (!routed) {
+                    if (state->run) LeaveGate(state);
+                    else Finish(window, id, state);
+                }
+            }
         }
         goto done;
     }
@@ -316,7 +433,7 @@ done:
 __declspec(dllexport) LRESULT CALLBACK PlacementHook(int code, WPARAM wparam, LPARAM lparam) {
     DWORD pid = 0;
     /* Mixed-bitness global hooks can call back on the installer thread. Never subclass a foreign HWND. */
-    BOOL local = (code == HCBT_CREATEWND || code == HCBT_MINMAX)
+    BOOL local = (code == HCBT_CREATEWND || code == HCBT_MINMAX || code == HCBT_ACTIVATE)
         && GetWindowThreadProcessId((HWND)wparam, &pid) == GetCurrentThreadId() && pid == GetCurrentProcessId();
     if (local && Active() && shared->owner != GetCurrentProcessId() && !ShellProcess() && SubclassAvailable()) {
         HWND window = (HWND)wparam;
@@ -338,20 +455,22 @@ __declspec(dllexport) LRESULT CALLBACK PlacementHook(int code, WPARAM wparam, LP
                 LeaveGate(&before);
             }
         }
-        if (code != HCBT_CREATEWND) return CallNextHookEx(NULL, code, wparam, lparam);
-        CBT_CREATEWNDW *creation = (CBT_CREATEWNDW *)lparam;
-        if (!(creation->lpcs->style & WS_CHILD) && Ordinary(window)
+        if (code != HCBT_CREATEWND && !(code == HCBT_ACTIVATE && RunDialog(window)))
+            return CallNextHookEx(NULL, code, wparam, lparam);
+        CBT_CREATEWNDW *creation = code == HCBT_CREATEWND ? (CBT_CREATEWNDW *)lparam : NULL;
+        if ((!creation || !(creation->lpcs->style & WS_CHILD)) && Ordinary(window)
             && !subclassApi.Get(window, WindowProc, (UINT_PTR)&PlacementHook, &reference)) {
             WindowState *state = HeapAlloc(GetProcessHeap(), HEAP_ZERO_MEMORY, sizeof(*state));
             /* A pending hidden HWND may outlive the controller and its global hook. */
             if (state && (pinned || GetModuleHandleExW(GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS
                 | GET_MODULE_HANDLE_EX_FLAG_PIN, (LPCWSTR)(ULONG_PTR)&PlacementHook, &module))) {
                 pinned = TRUE; state->owner = shared->owner; state->born = shared->born;
+                state->run = RunDialog(window);
                 state->epoch = (DWORD)(GateValue() >> 32);
                 state->references = 1;
                 if (subclassApi.Set(window, WindowProc, (UINT_PTR)&PlacementHook, (DWORD_PTR)state)) {
-                    CREATESTRUCTW *parameters = creation->lpcs;
-                    if ((parameters->style & WS_VISIBLE) && (parameters->style & WS_CAPTION)
+                    CREATESTRUCTW *parameters = creation ? creation->lpcs : NULL;
+                    if (parameters && !ExplorerDialog(window) && (parameters->style & WS_VISIBLE) && (parameters->style & WS_CAPTION)
                         && parameters->x != CW_USEDEFAULT && parameters->y != CW_USEDEFAULT
                         && parameters->cx > 0 && parameters->cy > 0) {
                         WindowState before = *state;
@@ -397,6 +516,7 @@ __declspec(dllexport) DWORD WINAPI PlacementStart(void) {
             InterlockedExchange64(&shared->gates, (LONG64)((ULONGLONG)epoch << 32));
             shared->owner = 0;
             shared->blocked = FALSE;
+            shared->runDeadline = 0; shared->runDevice[0] = 0;
             shared->host32 = shared->host32Error = shared->placed = shared->skipped = shared->failed = 0;
             shared->abi = PLACEMENT_ABI;
             FILETIME exit, kernel, user;

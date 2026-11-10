@@ -18,7 +18,7 @@ class PlacementBridge {
             "Ptr", 0, "UInt", 0x1100, "Ptr") ; DLL_LOAD_DIR | SYSTEM32
         if !this.Module
             throw OSError(, , "Cannot load KeybindPlacement64.dll")
-        for name in ["Start", "Stop", "Update", "Block", "Status"] {
+        for name in ["Start", "Stop", "Update", "Block", "Status", "Run"] {
             address := DllCall("GetProcAddress", "Ptr", this.Module, "AStr", "Placement" name, "Ptr")
             if !address
                 throw Error("Missing placement export: " name)
@@ -39,7 +39,7 @@ class PlacementBridge {
         this.Host := pid
         this.HostDeadline := A_TickCount + 3000
         this.HostProcess := DllCall("OpenProcess", "UInt", 0x1000, "Int", false, "UInt", pid, "Ptr")
-        PlacementLog("Native pre-show ready; ABI=2; PID=" DllCall("GetCurrentProcessId", "UInt")
+        PlacementLog("Native pre-show ready; ABI=3; PID=" DllCall("GetCurrentProcessId", "UInt")
             "; x64 hook installed; x86-host-pid=" this.Host)
     }
 
@@ -68,6 +68,9 @@ class PlacementBridge {
             PlacementLog("Native pre-show; " counts)
         }
     }
+
+    RequestRun(device) => this.Module && this.Started
+        && !!DllCall(this.Functions["Run"], "Str", device, "Int")
 
     Block(block) => !this.Module || !this.Started
         || !!DllCall(this.Functions["Block"], "Int", block, "Int")

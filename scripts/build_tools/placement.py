@@ -19,7 +19,7 @@ def build(stage, *, test=False):
         if "comctl32.dll" in {name.lower() for name in details["imports"]}:
             raise RuntimeError("Placement DLL must resolve optional Common Controls functions at runtime: " + str(dll))
         if not {"PlacementStart", "PlacementJoin", "PlacementStop", "PlacementHook", "PlacementBlock",
-                "PlacementUpdate", "PlacementStatus", "PlacementAlive"}.issubset(details["exports"]):
+                "PlacementUpdate", "PlacementStatus", "PlacementAlive", "PlacementRun"}.issubset(details["exports"]):
             raise RuntimeError("Missing native placement exports: " + str(dll))
     run(["i686-w64-mingw32-gcc", *flags, "-municode", "-mwindows", source / "host.c",
          "-o", stage / RUNTIME_FILES[2]])
@@ -38,10 +38,17 @@ def tests(wine, stage):
             run([target + "-w64-mingw32-gcc", "-std=c11", "-O2", "-Wall", "-Wextra", "-Werror",
                  "-municode", "-static-libgcc", fixture, *resources,
                  "-o", stage / f"placement-{name}{bits}.exe"])
-        for name in ("gate", "subclass"):
+        run_host = stage / f"run{bits}"
+        run_host.mkdir(exist_ok=True)
+        run([target + "-w64-mingw32-gcc", "-std=c11", "-O2", "-Wall", "-Wextra", "-Werror",
+             "-municode", "-mwindows", "-static-libgcc", fixture.with_name("run-fixture.c"), resource,
+             "-o", run_host / "explorer.exe", "-lcomctl32"])
+        for name in ("gate", "subclass", "run"):
             executable = stage / f"placement-{name}{bits}.exe"
             run([target + "-w64-mingw32-gcc", "-std=c11", "-O2", "-Wall", "-Wextra", "-Werror",
-                 "-municode", "-static-libgcc", PROJECT / f"tests/window-placement/{name}-tests.c",
+                 "-municode", "-static-libgcc",
+                 *(["-include", fixture.with_name("virtual-monitors.h")] if name == "run" else []),
+                 PROJECT / f"tests/window-placement/{name}-tests.c",
                  "-o", executable, "-ldwmapi"])
             run([wine.binary, windows_path(executable)], environment=wine.environment,
                 timeout=30, log=stage / f"{name}{bits}.log")

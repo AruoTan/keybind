@@ -34,7 +34,7 @@ def controller_tests(wine):
     pe_details(abi_dll)
     wine.test("controller-tests")
     wine.test("monitor-tests")
-    wine.test("placement-tests", "--skip-dwm", group="window-placement")
+    wine.test("placement-tests", group="window-placement")
     placement.tests(wine, BUILD / "tests/window-placement/native")
     wine.test("rdp-tests")
     wine.test("indicator-tests")
@@ -76,7 +76,7 @@ def build_dll(lock, stage, locations):
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--test-only", action="store_true", help="Run controller, GUID ABI and real window capture tests without packaging")
-    parser.add_argument("--test-placement", action="store_true", help="Run only native first-show and fallback window-placement tests")
+    parser.add_argument("--test-placement", action="store_true", help="Run only native pre-show placement and Run keyboard ordering tests")
     arguments = parser.parse_args()
     if not os.environ.get("DISPLAY"):
         raise RuntimeError("Use ./build.sh to provide a headless X display.")
@@ -89,7 +89,7 @@ def main():
         try:
             wine.boot()
             if arguments.test_placement:
-                wine.test("placement-tests", "--skip-dwm", group="window-placement")
+                wine.test("placement-tests", group="window-placement")
                 placement.tests(wine, BUILD / "tests/window-placement/native")
                 return
             controller_tests(wine)

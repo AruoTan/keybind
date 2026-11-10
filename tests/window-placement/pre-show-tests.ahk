@@ -16,7 +16,7 @@ try {
     library := DllCall("LoadLibraryExW", "Str", folder "\KeybindPlacement64.dll", "Ptr", 0, "UInt", 0x1100, "Ptr")
     Check(library, "Load x64 placement DLL")
     functions := Map()
-    for name in ["Start", "Stop", "Update", "Block", "Status"] {
+    for name in ["Start", "Stop", "Update", "Block", "Status", "Run"] {
         functions[name] := DllCall("GetProcAddress", "Ptr", library, "AStr", "Placement" name, "Ptr")
         Check(functions[name], "Native export " name)
     }
@@ -76,7 +76,7 @@ try {
             Check(!ProcessExist(fixturePid), "Fixture exited: " bits "/" scenario)
             output := FileRead(path)
             if scenario = "blocked-hidden" {
-                Check(InStr(output, "first 100 100 240 160 0"), "Blocked native show remains eligible for fallback: " output)
+                Check(InStr(output, "first 100 100 240 160 0"), "Blocked native show stays in place: " output)
                 Check(DllCall(functions["Block"], "Int", 0, "Int"), "Release blocked-show guard")
             } else {
                 Check(InStr(output, "crash-after-routing"), "Fixture exits during first-show commit")
@@ -86,12 +86,63 @@ try {
         }
     }
     for bits in [64, 32] {
+        for scenario in ["position", "reuse", "restart", "dragged", "expired", "blocked"] {
+            path := logPath ".run." bits "." scenario
+            for suffix in ["", ".go", ".again"] {
+                try FileDelete path suffix
+            }
+            Run '"' folder '\run' bits '\explorer.exe" "' path '" ' scenario localHook, , , &fixturePid
+            deadline := A_TickCount + 3000
+            while (!FileExist(path) || !InStr(FileRead(path), "ready")) && A_TickCount < deadline
+                Sleep 10
+            Check(FileExist(path) && InStr(FileRead(path), "ready"), "Run HWND ready: " bits "/" scenario)
+            Check(DllCall(functions["Run"], "Str", "TEST_RIGHT", "Int"), "Publish the keypress monitor")
+            DllCall "SetCursorPos", "Int", 100, "Int", 300 ; Pointer moves after the request.
+            if scenario = "expired"
+                Sleep 1100
+            if scenario = "blocked"
+                Check(DllCall(functions["Block"], "Int", 1, "Int"), "Block Run pre-show placement")
+            FileAppend "go", path ".go"
+            if scenario = "reuse" || scenario = "restart" || scenario = "dragged" {
+                deadline := A_TickCount + 3000
+                while !InStr(FileRead(path), "hidden") && A_TickCount < deadline
+                    Sleep 10
+                Check(InStr(FileRead(path), "hidden 0"), "Hiding Run clears its native handled marker")
+                if scenario = "restart" {
+                    DllCall functions["Stop"]
+                    ProcessWaitClose host, 3
+                    Check(DllCall(functions["Start"], "UInt") = 0, "Restart the Run controller")
+                    Run '"' folder '\keybind-placement32.exe"', , "Hide", &host
+                }
+                Check(DllCall(functions["Run"], "Str", "TEST_LEFT", "Int"), "Publish a new request for the reused HWND")
+                DllCall "SetCursorPos", "Int", 800, "Int", 300
+                FileAppend "go", path ".again"
+            }
+            ProcessWaitClose fixturePid, 3
+            Check(!ProcessExist(fixturePid), "Run fixture exited: " bits "/" scenario)
+            output := FileRead(path)
+            if scenario = "expired" || scenario = "blocked"
+                Check(InStr(output, "first 20 548 240 160 0"), "Unrouted Run stays in place: " output)
+            else if scenario = "position"
+                Check(InStr(output, "first 656 590 200 120 1"), "Apply the host's pending geometry before hidden DPI layout: " output)
+            else {
+                expected := scenario = "dragged" ? "reused 125 310 240 160 1" : "reused 20 548 240 160 1"
+                Check(InStr(output, "first 656 590 200 120 1") && InStr(output, expected)
+                    && InStr(output, "unrequested 100 100 240 160 0"),
+                    "Run's first frame and reused HWND preserve current margins at the destination DPI, with no unsolicited relocation: " output)
+            }
+            if scenario = "blocked"
+                Check(DllCall(functions["Block"], "Int", 0, "Int"), "Release Run navigation guard")
+        }
+    }
+    DllCall "SetCursorPos", "Int", 800, "Int", 300
+    for bits in [64, 32] {
         path := logPath "." bits ".legacy"
         RunWait '"' folder '\placement-legacy' bits '.exe" "' path '" legacy' localHook
         output := FileRead(path)
         Check(InStr(output, "hook-module 1"), "Load hook in an application without a Common Controls v6 manifest")
         if InStr(output, "subclass-supported 0")
-            Check(InStr(output, "first 100 100 240 160 0"), "Missing subclass API leaves the window eligible for fallback: " output)
+            Check(InStr(output, "first 100 100 240 160 0"), "Missing subclass API leaves the window in place: " output)
         else
             Check(RegExMatch(output, "m)^first (?:[6-9]\d\d|1[01]\d\d) \d+ 240 160 1$"),
                 "An available subclass API still permits native placement: " output)
@@ -104,7 +155,7 @@ try {
     DllCall functions["Stop"]
     ProcessWaitClose host, 3
     Check(!ProcessExist(host), "x86 host unhooks and exits when controller stops")
-    FileAppend "PASS: native x64/x86 CBT normal-window first WM_PAINT on destination, saved/default/visible creation, maximized restore bounds, old HWND, reshow, early/visible owner dialog, exclusions, destruction, workspace guard, blocked-show fallback, application-crash recovery, hosts with/without a Common Controls v6 manifest and host shutdown; simulated work areas; explicit fixture loading=" (localHook != "") "; Windows global injection/physical DPI behavior unverified`n", logPath, "UTF-8"
+    FileAppend "PASS: native x64/x86 CBT normal-window first WM_PAINT on destination, saved/default/visible creation, maximized restore bounds, old HWND, reshow, early/visible owner dialog, exclusions, destruction, workspace guard, blocked-show skip, application-crash recovery, hosts with/without a Common Controls v6 manifest, Run first-paint placement/DPI layout/reuse/restart/request expiry and host shutdown; simulated work areas; explicit fixture loading=" (localHook != "") "; Windows global injection/physical DPI behavior unverified`n", logPath, "UTF-8"
 }
 catch as err {
     failure := err.Message "`n" err.Stack
