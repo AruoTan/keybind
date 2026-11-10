@@ -2,7 +2,9 @@ param(
     [string]$AhkPath,
     [string]$DllPath = (Join-Path $PSScriptRoot '..\dist\windows-x64\VirtualDesktopAccessor.dll'),
     [switch]$NativeCheck,
-    [switch]$Exercise
+    [switch]$Exercise,
+    [switch]$PlacementOnly,
+    [string]$PlacementTestDirectory = (Join-Path $PSScriptRoot '..\build\tests\window-placement\native')
 )
 $ErrorActionPreference = 'Stop'
 if ($env:OS -ne 'Windows_NT') { throw 'These tests require Windows and AutoHotkey v2 x64.' }
@@ -16,11 +18,10 @@ if (!$AhkPath) {
 }
 if (!$AhkPath -or !(Test-Path -LiteralPath $AhkPath)) { throw 'Pass -AhkPath pointing to AutoHotkey v2 AutoHotkey64.exe.' }
 $projectRoot = Split-Path $PSScriptRoot -Parent
-$testDir = Join-Path $projectRoot 'tests\virtual-desktop'
-$outputDir = Join-Path $projectRoot 'build\tests\virtual-desktop'
-New-Item -ItemType Directory -Path $outputDir -Force | Out-Null
-
-function Invoke-AhkTest([string]$Name, [string[]]$ExtraArguments = @()) {
+function Invoke-AhkTest([string]$Name, [string[]]$ExtraArguments = @(), [string]$Group = 'virtual-desktop') {
+    $testDir = Join-Path $projectRoot "tests\$Group"
+    $outputDir = Join-Path $projectRoot "build\tests\$Group"
+    New-Item -ItemType Directory -Path $outputDir -Force | Out-Null
     $script = Join-Path $testDir "$Name.ahk"
     $log = Join-Path $outputDir "$Name.log"
     $stdout = Join-Path $outputDir "$Name.stdout.log"
@@ -47,8 +48,16 @@ function Invoke-AhkTest([string]$Name, [string[]]$ExtraArguments = @()) {
     }
 }
 
+if ($PlacementOnly) {
+    $nativeDirectory = (Resolve-Path -LiteralPath $PlacementTestDirectory).Path
+    Invoke-AhkTest 'placement-tests' -Group 'window-placement'
+    Invoke-AhkTest 'pre-show-tests' -Group 'window-placement' -ExtraArguments @($nativeDirectory)
+    Invoke-AhkTest 'bridge-tests' -Group 'window-placement' -ExtraArguments @((Join-Path (Split-Path $nativeDirectory -Parent) 'production'))
+    exit
+}
 Invoke-AhkTest 'controller-tests'
 Invoke-AhkTest 'monitor-tests'
+Invoke-AhkTest 'placement-tests' -Group 'window-placement'
 Invoke-AhkTest 'rdp-tests'
 Invoke-AhkTest 'indicator-tests'
 Invoke-AhkTest 'window-tests'

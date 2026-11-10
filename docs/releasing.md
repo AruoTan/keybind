@@ -33,8 +33,8 @@ git push origin "$release_tag"
 
 | 附件 | 内容 |
 | --- | --- |
-| `keybind-windows-x64.zip` | 完整便携包：程序、DLL、验证工具、许可证与 AHK 输入源码 |
-| `keybind-scoop-x64.zip` | 仅 `keybind.exe` 与 `VirtualDesktopAccessor.dll` |
+| `keybind-windows-x64.zip` | 完整便携包：程序、DLL、验证工具、许可证与 AHK/C 输入源码 |
+| `keybind-scoop-x64.zip` | `keybind.exe`、`VirtualDesktopAccessor.dll`、两个架构的定位 DLL 与 x86 定位宿主 |
 | `keybind.json` | 指向本版本 Scoop ZIP 的 manifest 与 SHA256 |
 | `keybind-keepass-ime.zip` | 独立可选插件、许可证与部署说明 |
 | `LICENSE` | GPL-3.0-only 许可证 |

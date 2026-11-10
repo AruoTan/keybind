@@ -22,7 +22,7 @@
 | `scripts/download-verified.sh` | Linux 工具下载校验与备用来源回退 |
 | `scripts/download-verified.ps1` | Windows 下载校验与镜像回退 |
 
-环境安装使用 Bash，Windows KeePass 参考下载使用 PowerShell。Python 负责项目构建与打包。Linux 本机 `cc` 用于 Rust 构建脚本和过程宏，MinGW 用于 Windows 目标链接，Wine/WoW64 用于运行 Ahk2Exe。
+环境安装使用 Bash，Windows KeePass 参考下载使用 PowerShell。Python 负责项目构建与打包。Linux 本机 `cc` 用于 Rust 构建脚本和过程宏，x64 MinGW 用于 Windows 主程序依赖，i686 MinGW 用于 32 位定位 DLL 和宿主，Wine/WoW64 用于运行 Ahk2Exe 与定位测试。
 
 ## 检查与更新
 

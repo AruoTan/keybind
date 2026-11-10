@@ -14,9 +14,9 @@
 
 | 路径 | 内容 |
 | --- | --- |
-| `dist/keybind-windows-x64.zip` | 完整便携包，含运行文件、验证工具、许可证与 AHK 输入源码 |
+| `dist/keybind-windows-x64.zip` | 完整便携包，含运行文件、验证工具、许可证与 AHK/C 输入源码 |
 | `dist/windows-x64/` | 主 EXE、DLL、验证 EXE 与 `verify.bat` |
-| `dist/SHA256SUMS` | 三个二进制与便携包的 SHA256 |
+| `dist/SHA256SUMS` | 全部运行二进制、验证工具与便携包的 SHA256 |
 | `build/metadata/keybind-build.json` | 版本、工具链、源码与产物哈希、PE 信息及验证范围 |
 | `build/logs/`、`build/tests/` | 编译日志与测试结果 |
 | `build/cache/` | 上游源码与 Cargo 编译缓存 |
@@ -27,7 +27,7 @@
 (cd dist && sha256sum -c SHA256SUMS)
 ```
 
-工具版本、下载地址及 SHA256 统一维护在 [.devcontainer/toolchain.json](../.devcontainer/toolchain.json)。当前使用 AutoHotkey 2.0.30 x64、Rust 1.90.0 和 Windows GNU 目标，VirtualDesktopAccessor 固定提交 `ceb648849dcc5760a7f4ed223308ffe3de0b51c6`。Cargo 使用 `--locked`，构建检查 x64 架构、DLL 导出及未附带的开发运行库依赖。
+工具版本、下载地址及 SHA256 统一维护在 [.devcontainer/toolchain.json](../.devcontainer/toolchain.json)。当前使用 AutoHotkey 2.0.30 x64、Rust 1.90.0 和 Windows GNU 目标，VirtualDesktopAccessor 固定提交 `ceb648849dcc5760a7f4ed223308ffe3de0b51c6`。Cargo 使用 `--locked`，构建检查 x64/x86 原生组件架构、DLL 导出及未附带的开发运行库依赖。
 
 ## 目录与职责
 
@@ -36,6 +36,8 @@
 | `src/keybind.ahk` | 加载模块并初始化 |
 | `src/modules/keyboard.ahk`、`mouse.ahk` | 通用键盘与鼠标快捷键 |
 | `src/modules/virtual-desktop/` | 桌面控制器、原生接口、窗口识别及提示渲染 |
+| `src/modules/window-placement/` | 新窗口和运行对话框的逐屏定位、WinEvent 生命周期与结果确认 |
+| `src/native/window-placement/` | x64/x86 进程内首次显示定位、共享状态与 x86 Hook 宿主 |
 | `src/modules/remote-desktop/` | 物理按键拦截、RDP 识别与焦点交接 |
 | `src/modules/keepass-ime/` | IME 状态与 KeePass 消息桥接 |
 | `plugins/keepass-ime/` | KeePass C# 插件 |
@@ -48,7 +50,7 @@
 
 ## 源码调试
 
-Windows 上退出已编译的 keybind，保留 `dist/windows-x64/VirtualDesktopAccessor.dll`，使用 AutoHotkey v2 x64 启动源码：
+Windows 上退出已编译的 keybind，保留 `dist/windows-x64/` 中的全部原生运行组件，使用 AutoHotkey v2 x64 启动源码：
 
 ```powershell
 & 'C:\Tools\AutoHotkey64.exe' .\src\keybind.ahk
@@ -73,6 +75,18 @@ Windows 上退出已编译的 keybind，保留 `dist/windows-x64/VirtualDesktopA
 
 实现细节分别见 [虚拟桌面](virtual-desktop.md)、[RDP 钩子与焦点](remote-desktop.md) 和 [KeePass 桥接](keepass-ime.md)。
 
+`WindowPlacementInit()` 独立初始化，不要求虚拟桌面 DLL 可用。`PlacementBridge` 加载 x64 DLL 并启动同目录 x86 宿主。两种架构通过固定宽度的会话内映射共享控制进程身份、创建时间、心跳、导航锁及计数；宿主在控制进程退出后撤销 Hook 并退出。MinGW 分别构建两种架构，检查 PE 类型、导出和运行库依赖，不使用 PDB 或额外 Hook 库。
+
+进程内 `WH_CBT` 只接管新建顶层应用窗口。DLL 不静态导入 Common Controls；按宿主当前加载环境动态检查四个窗口子类接口，缺少接口时交给显示后的兼容路径，不修改宿主的激活上下文。构建检查两个架构均没有 `COMCTL32.dll` 硬依赖，避免未启用 Common Controls v6 的应用在加载 Hook 时弹出“无法找到入口”。在创建阶段接入窗口过程，在 `WM_WINDOWPOSCHANGING` 中先执行应用自己的恢复逻辑，再修改首次显示的位置。显式可见创建参数提前调整；隐藏窗口首次最大化前先定位普通还原矩形。对话框使用可见所有者的目标屏幕。首次位置提交完成后移除子类过程；已显示窗口不因激活、恢复或鼠标换屏再次搬动。回调只处理当前进程当前线程的 HWND，排除混合架构 Hook 在安装线程的回调。窗口在回调期间销毁通过引用计数收尾。DLL 在应用进程中固定加载，以保证隐藏待显示窗口及正在执行的回调不会跳到已卸载代码。
+
+原生首次显示与虚拟桌面导航共享按控制进程身份与启动代次命名的系统互斥锁。旧实例回调只能释放自己的锁；应用在首次显示中崩溃或线程退出后，系统允许后续操作重新取得锁。有显示提交尚未完成时，本次导航返回 busy，后续按键可重试；并发显示无法立即取得锁时使用显示后的兼容路径。控制端每 250 毫秒更新心跳，超过 1.5 秒或控制进程身份失效即停止新定位。进程内 Hook 不提升权限，不覆盖安全桌面、受保护进程和禁止加载 DLL 的应用，也不能阻止应用在首次显示后重新定位。
+
+进程外 WinEvent 保留为兼容路径，复用 `VDWindows` 与 `VDMonitors`。回调收集顶层 SHOW、DESTROY、FOREGROUND 事件，定时器执行资格检查及有界移动；原生定位成功的窗口带有属性标记，不再补搬；导航期间跳过或定位失败的窗口保留兼容路径资格。已有 HWND 启动时登记，销毁时释放。运行对话框保留按键时的目标屏幕和复用识别，不由原生 Hook 重复处理。DLL 缺失时记录降级原因，原有快捷键继续工作。
+
+`Win+R` 使用透传观察热键，按键继续由 Windows 处理，仅记录短期目标屏幕。通过 explorer 的 `#32770` 对话框和运行输入控件 ID `0x3002` 识别复用窗口，不匹配本地化标题。该识别规则需要在目标 Windows 构建上验证。窗口定位等待虚拟桌面 `Navigating` 结束，跳过 DWM 隐藏窗口，不激活窗口、不修改固定状态；后续工作区同步按物理屏幕归属接纳新窗口。
+
+开始菜单与搜索的原生 Hook 属于独立 explorer 项目，需求见 [系统面板定位](explorer-monitor-routing.md)。不要在 keybind 中轮询移动这些 Shell 窗口。
+
 ## 自动化验证
 
 只运行 Linux/Wine 测试：
@@ -80,6 +94,22 @@ Windows 上退出已编译的 keybind，保留 `dist/windows-x64/VirtualDesktopA
 ```bash
 ./build.sh --test-only
 ```
+
+只验证新窗口定位：
+
+```bash
+./build.sh --test-placement
+```
+
+该命令构建 `build/tests/window-placement/native/` 中的双架构测试 DLL 和窗口夹具，以及 `production/` 中的正式组件。测试 DLL 将两个工作区模拟在 1280×800 测试画面内，不能分发到运行目录。窗口夹具分别构建带 Common Controls v6 清单和不带清单的版本；后者在宿主不提供子类接口时验证加载成功并保留兼容路径资格。Wine 可能仍提供完整接口，接口缺失另由双架构故障注入测试覆盖。Wine 不验证 Windows 的全局 DLL 注入；容器测试通过测试进程显式加载相同 Hook 代码，检查首次 WM_PAINT 坐标和进程生命周期。
+
+在 Windows 检查真实全局 Hook 注入时，将上述两个目录复制到 Windows 项目对应路径，再执行：
+
+```powershell
+.\scripts\test-virtual-desktop.ps1 -AhkPath 'C:\Tools\AutoHotkey64.exe' -PlacementOnly
+```
+
+该检查仍使用模拟工作区。真实混合 DPI、多屏负坐标、最大化与还原、后台启动、Electron/WinUI、高权限及禁止注入应用，使用正式构建逐项验收。
 
 发布脚本与下载检查：
 
@@ -91,6 +121,11 @@ python3 -m unittest discover -s tests/release -v
 | --- | --- |
 | `controller-tests.ahk` | 边界创建、GUID 与顺序变化、占用、回退、重复按键及最终提示编号 |
 | `monitor-tests.ahk` | 逐屏切换、未分配桌面的窗口、准备期重入与恢复互斥、原前台窗口保留、隐藏主窗口与新对话框、回退与重启恢复、真实窗口焦点及显示器发现 |
+| `window-placement/placement-tests.ahk` | 首次显示、旧窗口与 HWND 复用、所属对话框、运行请求、超时及断屏；真实跨进程 WinEvent 和模拟屏幕工作区上的窗口移动 |
+| `window-placement/pre-show-tests.ahk` | x64/x86 原生首次 WM_PAINT 坐标、应用恢复旧位置、最大化还原位置、重复显示、所属对话框、排除项、回调内销毁、导航锁、显示期间崩溃恢复、导航期间显示的兼容资格、带/不带 Common Controls v6 清单的宿主与宿主退出 |
+| `window-placement/bridge-tests.ahk` | 正式 DLL 加载、x86 宿主就绪、导航门禁、心跳、快速重启及重复关闭 |
+| `window-placement/subclass-tests.c` | 两种架构的可选 Common Controls 接口绑定、任一接口缺失、依赖加载失败及结果缓存 |
+| `window-placement/gate-tests.c` | 两种架构的启动代次、旧回调释放、导航排他、门禁所有权及持锁进程退出恢复 |
 | `rdp-tests.ahk` | 物理组合键、钩子回调、连续导航、固定窗口与记忆窗口的焦点恢复及直接输入 |
 | `indicator-tests.ahk` | 透明圆角、逐屏位置与 DPI、点击穿透、缓存、可中断绘制和资源生命周期 |
 | `guid-abi.c` / `guid-abi.ahk` | 真实 x64 GUID ABI、UTF-8 桌面名称、HWND 宽度、COM HRESULT 与零 GUID |
@@ -118,6 +153,7 @@ KeePass 插件在独立 Windows 任务构建和验证，入口见 [KeePass 模�
 | 最小化、固定与未知归属 | 最小化阻止删除，固定状态保留，查询失败不删除 |
 | 高权限窗口、多显示器与不同 DPI | 失败保留源桌面，提示位置、缩放、圆角和阴影正常 |
 | 逐屏工作区 | 鼠标选屏，仅选中屏幕切换、创建与清理；携带窗口跨屏错配时不操作 |
+| 新窗口与运行 | 两屏分别从搜索、运行、任务栏启动普通及最大化应用；新窗口跟随鼠标，既有窗口不搬屏，对话框跟随主窗口 |
 | 断屏、原生桌面变化与重启 | 后台窗口完整恢复，用户原生桌面保留，单屏恢复原导航方式 |
 | 全屏 Windows App / mstsc | 桌面快捷键只控制本机；持续按住 Win+Ctrl 逐次按松箭头可往返 |
 | 返回 RDP 与离开后输入 | 自动恢复会话，键盘立即响应，不依赖鼠标点击 |

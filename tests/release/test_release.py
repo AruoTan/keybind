@@ -70,7 +70,9 @@ class ReleaseTests(unittest.TestCase):
     def package(self):
         release.write_assets(self.input, self.stage, "AruoTan/keybind", self.tag, self.records)
 
-    def test_runtime_contains_only_exe_and_virtual_desktop_dll(self):
+    def test_runtime_contains_application_and_required_native_components(self):
+        self.assertEqual(set(release.RUNTIME_FILES), {"keybind.exe", "VirtualDesktopAccessor.dll",
+                         "KeybindPlacement64.dll", "KeybindPlacement32.dll", "keybind-placement32.exe"})
         self.package()
         with zipfile.ZipFile(self.stage / release.SCOOP_ZIP) as archive:
             self.assertEqual(set(archive.namelist()), set(release.RUNTIME_FILES))
@@ -165,6 +167,11 @@ class ReleaseTests(unittest.TestCase):
 
     def test_modified_binary_is_rejected(self):
         (self.windows / "keybind.exe").write_bytes(b"modified")
+        with self.assertRaisesRegex(ValueError, "artifact hash"):
+            self.package()
+
+    def test_modified_native_placement_dll_is_rejected(self):
+        (self.windows / "KeybindPlacement32.dll").write_bytes(b"modified native hook")
         with self.assertRaisesRegex(ValueError, "artifact hash"):
             self.package()
 

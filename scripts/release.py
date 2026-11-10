@@ -14,8 +14,9 @@ import zipfile
 from build_tools.common import BUILD, DIST, PROJECT
 from build_tools.toolchain import digest
 from build_tools.version import validate_version
+from build_tools.placement import RUNTIME_FILES as PLACEMENT_FILES
 
-RUNTIME_FILES = ("keybind.exe", "VirtualDesktopAccessor.dll")
+RUNTIME_FILES = ("keybind.exe", "VirtualDesktopAccessor.dll", *PLACEMENT_FILES)
 BUILD_FILES = (*RUNTIME_FILES, "verify-virtual-desktop.exe")
 PORTABLE_ZIP = "keybind-windows-x64.zip"
 SCOOP_ZIP = "keybind-scoop-x64.zip"
@@ -117,7 +118,7 @@ def write_assets(input_dir, stage, repository, tag, records_dir=None):
     (stage / "release-notes.md").write_text(
         f"Keybind {version}\n\n"
         "- `keybind-windows-x64.zip`: portable application, verifier, licenses and source inputs.\n"
-        "- `keybind-scoop-x64.zip`: only keybind.exe and VirtualDesktopAccessor.dll.\n"
+        "- `keybind-scoop-x64.zip`: keybind.exe, VirtualDesktopAccessor.dll and native window-placement components.\n"
         "- `keybind.json`: Scoop manifest with the exact runtime ZIP SHA256.\n"
         "- `keybind-keepass-ime.zip`: optional KeePass plugin; extract into KeePass/Plugins.\n"
         "- `LICENSE` and `SHA256SUMS`: GPL-3.0-only license and release file hashes.\n\n"

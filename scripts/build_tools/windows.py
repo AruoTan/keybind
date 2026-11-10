@@ -7,14 +7,14 @@ import struct
 import subprocess
 
 from . import toolchain as tools
-from .common import BUILD, LOGS, PROJECT, TEST_OUTPUT, TESTS, run
+from .common import BUILD, LOGS, PROJECT, run
 
 
 def windows_path(path):
     return "Z:" + str(Path(path).resolve()).replace("/", "\\")
 
 
-def pe_details(path):
+def pe_details(path, architecture="x86_64"):
     """Read architecture, exports and imports without loading Windows code."""
     data = Path(path).read_bytes()
     pe = struct.unpack_from("<I", data, 0x3C)[0]
@@ -23,8 +23,9 @@ def pe_details(path):
     machine, count = struct.unpack_from("<HH", data, pe + 4)
     optional_size = struct.unpack_from("<H", data, pe + 20)[0]
     optional = pe + 24
-    if machine != 0x8664 or struct.unpack_from("<H", data, optional)[0] != 0x20B:
-        raise RuntimeError("Output is not Windows x64: " + str(path))
+    expected_machine, magic, directories = (0x8664, 0x20B, 112) if architecture == "x86_64" else (0x14C, 0x10B, 96)
+    if machine != expected_machine or struct.unpack_from("<H", data, optional)[0] != magic:
+        raise RuntimeError("Output is not Windows " + architecture + ": " + str(path))
     sections = []
     for index in range(count):
         offset = optional + optional_size + index * 40
@@ -42,14 +43,14 @@ def pe_details(path):
         return data[offset:data.index(b"\0", offset)].decode("ascii")
 
     exports, imports = set(), set()
-    export_rva = struct.unpack_from("<I", data, optional + 112)[0]
+    export_rva = struct.unpack_from("<I", data, optional + directories)[0]
     if export_rva:
         directory = address(export_rva)
         names_count = struct.unpack_from("<I", data, directory + 24)[0]
         names = address(struct.unpack_from("<I", data, directory + 32)[0])
         for index in range(names_count):
             exports.add(string(struct.unpack_from("<I", data, names + index * 4)[0]))
-    import_rva = struct.unpack_from("<I", data, optional + 120)[0]
+    import_rva = struct.unpack_from("<I", data, optional + directories + 8)[0]
     if import_rva:
         directory = address(import_rva)
         while any(data[directory:directory + 20]):
@@ -58,7 +59,7 @@ def pe_details(path):
     for dependency in imports:
         if re.match(r"(?i)(libgcc|libstdc\+\+|libwinpthread|vcruntime|msvcp)", dependency):
             raise RuntimeError("Unbundled development runtime dependency: " + dependency)
-    return {"architecture": "x86_64", "exports": sorted(exports), "imports": sorted(imports)}
+    return {"architecture": architecture, "exports": sorted(exports), "imports": sorted(imports)}
 
 
 class Wine:
@@ -82,12 +83,13 @@ class Wine:
     def close(self):
         subprocess.run([tools.wine_server(), "-k"], env=self.environment, timeout=10, capture_output=True)
 
-    def test(self, name, *arguments):
-        result = TEST_OUTPUT / (name + ".log")
+    def test(self, name, *arguments, group="virtual-desktop"):
+        test_directory = PROJECT / "tests" / group
+        result = BUILD / "tests" / group / (name + ".log")
         result.parent.mkdir(parents=True, exist_ok=True)
         result.unlink(missing_ok=True)
         run([self.binary, self.locations["ahk"], "/ErrorStdOut=UTF-8",
-             windows_path(TESTS / (name + ".ahk")), windows_path(result), *arguments],
+             windows_path(test_directory / (name + ".ahk")), windows_path(result), *arguments],
             environment=self.environment, timeout=60, log=result.with_suffix(".stdout.log"))
         if not result.is_file():
             raise RuntimeError("Test did not produce its result: " + name)

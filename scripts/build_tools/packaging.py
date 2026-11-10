@@ -7,11 +7,12 @@ import zipfile
 from . import toolchain as tools
 from .common import PROJECT, SOURCE, TESTS, run
 from .version import read_version
+from .placement import RUNTIME_FILES as PLACEMENT_FILES
 
 
 def package(lock, stage, locations, dll_details):
     version = read_version()
-    files = ["keybind.exe", "VirtualDesktopAccessor.dll", "verify-virtual-desktop.exe"]
+    files = ["keybind.exe", "VirtualDesktopAccessor.dll", *PLACEMENT_FILES, "verify-virtual-desktop.exe"]
     manifest = {
         "version": version,
         "buildHost": "linux-x86_64", "target": lock["rust"]["target"],
@@ -20,9 +21,11 @@ def package(lock, stage, locations, dll_details):
         "rust": run([locations["cargo"], "+" + lock["rust"]["version"], "--version"]),
         "rustup": run([locations["rustup"], "--version"]).splitlines()[0],
         "mingw": run(["x86_64-w64-mingw32-gcc", "--version"]).splitlines()[0],
+        "mingw32": run(["i686-w64-mingw32-gcc", "--version"]).splitlines()[0],
         "wine": run([tools.wine_binary(), "--version"]),
         "controllerTests": True, "guidAbiTests": True, "windowDesktopHresultTests": True,
         "compiledStartupSmokeTest": True,
+        "compiledNativePlacementStartupSmokeTest": True,
         "rdpHookTests": True, "windowsRdpFullscreenTest": False,
         "rdpFocusHandoffTests": True, "windowsRdpKeyboardAfterSwitchTest": False,
         "continuousDesktopNavigationTests": True, "rememberedDesktopFocusTests": True,
@@ -30,11 +33,14 @@ def package(lock, stage, locations, dll_details):
         "monitorWorkspaceTests": True, "windowsIndependentMonitorSwitchTest": False,
         "desktopIndicatorTests": True, "windowsDesktopIndicatorTest": False,
         "windowCaptureTests": True, "dwmCloakTests": False,
+        "nativePlacementFixtureTests": True, "nativePlacementBridgeTests": True,
+        "windowsGlobalPlacementInjectionTest": False, "windowsMixedDpiFirstShowTest": False,
         "windowsWindowTests": False, "nativeQueriesChecked": False, "nativeDesktopOperationsChecked": False,
         "dll": dll_details,
         "artifacts": [{"file": name, "sha256": tools.digest(stage / name)} for name in files],
         "inputs": [{"file": str(path.relative_to(PROJECT)), "sha256": tools.digest(path)}
-                   for path in [*sorted(SOURCE.rglob("*.ahk")), TESTS / "native-check.ahk"]],
+                   for path in [*sorted(SOURCE.rglob("*.ahk")), *sorted((SOURCE / "native").rglob("*.c")),
+                                *sorted((SOURCE / "native").rglob("*.h")), TESTS / "native-check.ahk"]],
     }
     (stage.parent / "keybind-build.json").write_text(json.dumps(manifest, indent=2) + "\n")
     shutil.copy2(PROJECT / "LICENSE", stage / "LICENSE.txt")
@@ -50,7 +56,7 @@ def package(lock, stage, locations, dll_details):
     ).replace("\n", "\r\n").encode("ascii"))
     (stage / "README.txt").write_text(
         f"Keybind {version} Windows x64 portable build\n\n"
-        "Extract the whole ZIP. Keep both EXE and DLL in the same directory.\n"
+        "Extract the whole ZIP. Keep the EXE, DLLs and keybind-placement32.exe together.\n"
         "Exit the old keybind process before starting keybind.exe.\n"
         "Win+Shift+Left/Right moves the active window and follows its desktop.\n"
         "Win+Ctrl+Left/Right switches desktops without moving windows, even from an empty desktop.\n"
@@ -59,6 +65,9 @@ def package(lock, stage, locations, dll_details):
         "Win+Shift requires the active owner window to be on that monitor.\n"
         "Inactive workspace windows stay accessible in a Keybind storage desktop in Task View.\n"
         "Restarting recovers storage after a crash; monitor layout or native desktop changes reset workspaces.\n"
+        "New desktop application windows are routed before first show by native x64/x86 hooks.\n"
+        "Unsupported or inaccessible windows use after-show placement and may briefly appear elsewhere.\n"
+        "Hooks do not elevate processes. Restart affected applications when upgrading native placement DLLs.\n"
         "After cleanup, a click-through card shows the final desktop number for one second.\n"
         "The card does not suppress the native Windows desktop-switch popup.\n"
         "Minimized/hidden source apps are retained; pinned apps stay pinned. Unknown ownership retains the source.\n"

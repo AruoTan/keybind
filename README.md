@@ -9,7 +9,7 @@ scoop install https://github.com/AruoTan/keybind/releases/latest/download/keybin
 keybind
 ```
 
-也可从 [Releases](https://github.com/AruoTan/keybind/releases) 下载 `keybind-windows-x64.zip`，完整解压后启动 `keybind.exe`。程序与 `VirtualDesktopAccessor.dll` 必须放在同一目录。KeePass 插件单独下载 `keybind-keepass-ime.zip`。
+也可从 [Releases](https://github.com/AruoTan/keybind/releases) 下载 `keybind-windows-x64.zip`，完整解压后启动 `keybind.exe`，保留同目录的 DLL 与 `keybind-placement32.exe`。KeePass 插件单独下载 `keybind-keepass-ime.zip`。
 
 ## 快捷键
 
@@ -23,6 +23,8 @@ keybind
 | 文件资源管理器内按鼠标中键 | 返回上一级目录 |
 
 多显示器时，桌面快捷键只操作鼠标所在屏幕的工作区，其他屏幕保持原样；单显示器时使用 Windows 原生虚拟桌面。切换完成后显示最终编号，最小化窗口阻止源工作区删除，固定窗口保持固定。Windows App 和 mstsc 中同样控制本机；`Win+Shift+←/→` 替代 Windows 的跨显示器移动窗口功能。
+
+新建普通应用窗口移到首次显示时鼠标所在的屏幕，`Win+R` 的运行对话框移到按键时鼠标所在的屏幕。已有窗口激活后保持位置，对话框跟随主窗口。开始菜单和搜索的定位由独立 explorer 扩展实现，当前 keybind 不改变 `Win`、`Win+S` 的行为。
 
 ## 文档
 

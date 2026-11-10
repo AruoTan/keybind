@@ -11,6 +11,7 @@ import tempfile
 import zipfile
 
 from build_tools import toolchain as tools
+from build_tools import placement
 from build_tools.common import BUILD, DIST, LOGS, SOURCE, TEST_OUTPUT, TESTS, WINDOWS_DIST, run
 from build_tools.packaging import package
 from build_tools.windows import Wine, pe_details, windows_path
@@ -33,6 +34,8 @@ def controller_tests(wine):
     pe_details(abi_dll)
     wine.test("controller-tests")
     wine.test("monitor-tests")
+    wine.test("placement-tests", "--skip-dwm", group="window-placement")
+    placement.tests(wine, BUILD / "tests/window-placement/native")
     wine.test("rdp-tests")
     wine.test("indicator-tests")
     wine.test("guid-abi", windows_path(abi_dll))
@@ -73,6 +76,7 @@ def build_dll(lock, stage, locations):
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--test-only", action="store_true", help="Run controller, GUID ABI and real window capture tests without packaging")
+    parser.add_argument("--test-placement", action="store_true", help="Run only native first-show and fallback window-placement tests")
     arguments = parser.parse_args()
     if not os.environ.get("DISPLAY"):
         raise RuntimeError("Use ./build.sh to provide a headless X display.")
@@ -84,6 +88,10 @@ def main():
         wine = Wine(locations)
         try:
             wine.boot()
+            if arguments.test_placement:
+                wine.test("placement-tests", "--skip-dwm", group="window-placement")
+                placement.tests(wine, BUILD / "tests/window-placement/native")
+                return
             controller_tests(wine)
             if arguments.test_only:
                 return
@@ -91,12 +99,16 @@ def main():
                 stage = Path(temporary) / "windows-x64"
                 stage.mkdir()
                 details = build_dll(lock, stage, locations)
+                placement.build(stage)
                 wine.compile(SOURCE / "keybind.ahk", stage / "keybind.exe")
                 wine.compile(TESTS / "native-check.ahk", stage / "verify-virtual-desktop.exe")
                 with tempfile.TemporaryDirectory(prefix="keybind-startup-") as smoke_dir:
                     smoke_exe = Path(smoke_dir) / "keybind.exe"
                     shutil.copy2(stage / "keybind.exe", smoke_exe)
                     wine.test("startup-smoke", windows_path(smoke_exe))
+                    for name in placement.RUNTIME_FILES:
+                        shutil.copy2(stage / name, smoke_exe.parent / name)
+                    wine.test("startup-smoke", windows_path(smoke_exe), "--placement")
                 package(lock, stage, locations, details)
                 # Keep previous published binaries until compilation/tests pass.
                 WINDOWS_DIST.mkdir(parents=True, exist_ok=True)

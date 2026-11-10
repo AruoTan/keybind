@@ -81,6 +81,8 @@ VDNavigationBegin(state) {
     try {
         if state.Controller.Busy || (state.HasOwnProp("Navigating") && state.Navigating)
             return false
+        if state.HasOwnProp("PlacementGate") && !state.PlacementGate.Call(true)
+            return false
         state.Navigating := true
         return true
     }
@@ -130,7 +132,11 @@ VDNavigateWithIndicator(state, move, direction, focus := 0) {
         }
         return result ; A display failure must never turn navigation into a failure.
     }
-    finally state.Navigating := false
+    finally {
+        state.Navigating := false
+        if state.HasOwnProp("PlacementGate")
+            state.PlacementGate.Call(false)
+    }
 }
 
 VDMonitorRefresh(*) {
@@ -152,7 +158,11 @@ VDMonitorRefresh(*) {
         SetTimer VDMonitorRefresh, 0
         VDReport("Monitor workspace recovery failed: " VDErrorText(err))
     }
-    finally state.Navigating := false
+    finally {
+        state.Navigating := false
+        if state.HasOwnProp("PlacementGate")
+            state.PlacementGate.Call(false)
+    }
 }
 
 VDMonitorClose(*) {

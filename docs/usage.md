@@ -9,7 +9,7 @@ scoop install https://github.com/AruoTan/keybind/releases/latest/download/keybin
 keybind
 ```
 
-Scoop 安装 `keybind.exe`、`VirtualDesktopAccessor.dll`，并创建命令与开始菜单快捷方式。安装后需手动启动；程序不配置开机自启或自动提权。
+Scoop 安装主程序、虚拟桌面 DLL、`KeybindPlacement64.dll`、`KeybindPlacement32.dll` 和 `keybind-placement32.exe`，并创建命令与开始菜单快捷方式。安装后需手动启动；程序不配置开机自启或自动提权。
 
 便携使用时，从 [Releases](https://github.com/AruoTan/keybind/releases) 下载 `keybind-windows-x64.zip` 并完整解压，先运行 `verify.bat` 检查接口，再启动同目录的 `keybind.exe`。Windows 端不需要 AutoHotkey、Rust 或 Visual Studio。
 
@@ -27,6 +27,7 @@ Stop-Process -Name keybind
 | `Win+Shift+←/→` | 携带活动窗口移到左 / 右桌面并跟随；没有活动应用窗口时不操作 |
 | `Win+Ctrl+Space` | 开启或取消活动窗口置顶；RDP 会话获得焦点时让行 |
 | `Win+Shift+S` | 发送 `Win+Ctrl+Shift+S`；RDP 会话获得焦点时让行 |
+| `Win+R` | 保留系统运行对话框，多屏时定位到按键时鼠标所在屏幕；RDP 会话获得焦点时让行 |
 | 鼠标侧键 `XButton1` | 粘贴 |
 | 鼠标侧键 `XButton2` | 复制 |
 | 文件资源管理器内按鼠标中键 | 返回上一级目录 |
@@ -48,6 +49,18 @@ Stop-Process -Name keybind
 ### 多屏工作区
 
 各屏幕分别从工作区 1 开始，独立创建、编号和清理。新开的窗口属于所在屏幕当前工作区；拖到另一屏幕的可见窗口加入该屏幕当前工作区。跨屏窗口按主窗口占用面积最大的屏幕归属，对话框随主窗口整体处理。固定在所有桌面的窗口始终可见，最小化窗口切换后保留最小化状态。
+
+### 新窗口定位
+
+连接多个显示器时，新建普通主窗口移到首次显示时鼠标所在的屏幕，位置按两屏工作区换算。普通窗口保持大小，最大化窗口保留最大化状态；Windows 负责应用自身的 DPI 响应。新对话框跟随可见主窗口。`Win+R` 使用按键时选定的屏幕，包括系统复用已有运行对话框的情况。
+
+程序启动前已有的窗口、再次激活或恢复显示的窗口保持原位置。最小化、桌面、任务栏、工具窗口、虚拟桌面隐藏窗口和无边框全屏窗口跳过。鼠标屏幕改变不会持续搬动已打开的窗口。单屏不调整，RDP 获得焦点时不记录本机运行快捷键。
+
+普通桌面应用通过原生 x64/x86 Hook 在首次显示前定位，窗口完成首次显示后不再干预。应用在显示后再次恢复自己的位置时，不持续拉回。宿主缺少 Common Controls 子类接口、高权限、受保护、限制 DLL 加载或未经过拦截路径的窗口无法保证显示前定位；这些窗口与运行对话框使用首次显示后的兼容路径，可能短暂出现于原屏幕。兼容请求最多等待 1 秒，只提交一次移动，不反复抢位置。该功能不依赖虚拟桌面 DLL 初始化成功。
+
+原生组件与 keybind 同权限运行。退出后 Hook 停止处理新窗口；已加载 DLL 的应用为保证回调安全，会保留该 DLL 至进程结束。升级或回退时先退出 keybind，再关闭加载过组件的应用，替换完整运行文件后重新启动。
+
+`Win` 开始菜单和 `Win+S` 搜索需独立 explorer 扩展配合；本次 keybind 实现不改变它们的系统行为。扩展要求见 [系统面板定位](explorer-monitor-routing.md)。
 
 暂不显示的窗口存放在一个名为 `Keybind storage v1 {GUID}` 的后台原生桌面，切换工作区时只转移选中屏幕的窗口组，不切换全局桌面。`Win+Tab` 展示原生桌面和这个后台桌面，不展示各屏幕的工作区列表。
 
@@ -91,6 +104,10 @@ Get-Content -LiteralPath (Join-Path ([Environment]::GetFolderPath('LocalApplicat
 Get-Content -LiteralPath (Join-Path ([Environment]::GetFolderPath('LocalApplicationData')) 'keybind\remote-desktop.log') -Tail 80 -Encoding UTF8
 ```
 
+```powershell
+Get-Content -LiteralPath (Join-Path ([Environment]::GetFolderPath('LocalApplicationData')) 'keybind\window-placement.log') -Tail 40 -Encoding UTF8
+```
+
 | 现象或日志 | 处理 |
 | --- | --- |
 | `Cannot load VirtualDesktopAccessor.dll (Win32 126)` | 完整解压安装包，确认 DLL 与正在运行的 EXE 在同一目录 |
@@ -99,6 +116,7 @@ Get-Content -LiteralPath (Join-Path ([Environment]::GetFolderPath('LocalApplicat
 | RDP 仍收到桌面快捷键 | 确认日志有 `Session active` 和 `Captured`；没有 Captured 表示本机未截获 |
 | 切换后键盘无响应 | 保留 `switched-unfocused` 或焦点交接相关日志，并记录客户端与全屏状态 |
 | 提示卡片异常或进程退出 | 确认启动日志包含 `resident-cache-v1`，提供 Windows 应用程序错误中的故障模块和异常代码 |
+| 新窗口未移到鼠标屏幕 | 检查 `window-placement.log` 的 `Ready`、`Placement failed` 或 `Placement not confirmed`；窗口可能属于跳过范围或覆盖了定位结果 |
 
 日志位于 `%LOCALAPPDATA%\keybind`，超过 128 KiB 后轮换到 `.old`，不记录普通输入、密码、剪贴板或窗口内容。报告问题时附上 Windows 内部版本、keybind 版本、复现步骤与本次启动后的日志。
 

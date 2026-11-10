@@ -14,5 +14,5 @@ fi
 apt-get update
 DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
     binutils-mingw-w64-x86-64 build-essential ca-certificates curl file fonts-dejavu-core \
-    gcc-mingw-w64-x86-64-posix jq python3 unzip wine64 xauth xvfb zip
+    gcc-mingw-w64-x86-64-posix gcc-mingw-w64-i686-posix jq python3 unzip wine64 xauth xvfb zip
 rm -rf /var/lib/apt/lists/*

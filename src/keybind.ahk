@@ -8,7 +8,9 @@
 #Include %A_LineFile%/../modules/keyboard.ahk
 #Include %A_LineFile%/../modules/virtual-desktop/virtual-desktop.ahk
 #Include %A_LineFile%/../modules/remote-desktop/remote-desktop.ahk
+#Include %A_LineFile%/../modules/window-placement/window-placement.ahk
 
 KeePassImeInit()
 if VirtualDesktopInit()
     RemoteDesktopInit()
+WindowPlacementInit()
